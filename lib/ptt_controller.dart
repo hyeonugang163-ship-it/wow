@@ -26,6 +26,7 @@ class PttController {
 
   final VoiceTransport _transport;
   PttMode _mode;
+  bool _isPublishing = false;
 
   PttMode get mode => _mode;
 
@@ -46,17 +47,32 @@ class PttController {
     _mode = mode;
     final label = mode == PttMode.walkie ? 'instant' : 'manner';
     print('[PTT] startTalk called. mode=$label');
-    // v1.1 뼈대: 아직 전송 구현 없음.
-    // 이후 LiveKitTransport를 주입해 실제 전송을 구현한다.
+
     if (isWalkie && FF.androidInstantPlay) {
       // 플랫폼/정책에 따라 즉시 재생 모드를 선택적으로 처리.
     }
+
+    if (_isPublishing) {
+      return;
+    }
+
+    await _transport.warmUp();
+    await _transport.connect(url: 'noop', token: 'noop');
+    await _transport.startPublishing(Stream<List<int>>.empty());
+    _isPublishing = true;
   }
 
   /// 홀드-투-톡 종료.
   Future<void> stopTalk() async {
-    // 후속 구현에서 발행 종료 및 상태 정리를 수행.
     print('[PTT] stopTalk called.');
+    if (!_isPublishing) {
+      return;
+    }
+
+    await _transport.stopPublishing();
+    await _transport.disconnect();
+    await _transport.coolDown();
+    _isPublishing = false;
   }
 }
 
