@@ -40,7 +40,7 @@
             </intent-filter>
         </activity>
         <service
-            android:name=".ptt.PttService"
+            android:name=".PttService"
             android:exported="false"
             android:foregroundServiceType="microphone|mediaPlayback" />
         <!-- Don't delete the meta-data below.

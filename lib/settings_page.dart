@@ -1,18 +1,164 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:voyage/feature_flags.dart';
 
-class SettingsPage extends StatelessWidget {
+final _beepOnStartProvider = StateProvider<bool>((ref) => false);
+final _beepOnEndProvider = StateProvider<bool>((ref) => false);
+final _vibrateInWalkieProvider = StateProvider<bool>((ref) => false);
+
+class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final beepOnStart = ref.watch(_beepOnStartProvider);
+    final beepOnEnd = ref.watch(_beepOnEndProvider);
+    final vibrateInWalkie = ref.watch(_vibrateInWalkieProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Settings'),
       ),
-      body: const Center(
-        child: Text('Settings TODO'),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    Text(
+                      'PTT 모드 설명',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    SizedBox(height: 12),
+                    Text(
+                      '무전모드 (Walkie)\n'
+                      '• 서로 친구이고, 서로 "무전 허용"에 동의한 유저끼리만 사용 가능합니다.\n'
+                      '• 폰이 진동/무음이어도 (OS가 허용하는 범위에서) 바로 목소리가 재생되는 무전기 느낌의 모드입니다.\n'
+                      '• 상호동의 + 화이트리스트 기반의 "특권 모드"로 설계되어 있습니다.',
+                    ),
+                    SizedBox(height: 12),
+                    Text(
+                      '매너모드 (Manner)\n'
+                      '• 즉시 재생 대신 녹음본(음성 메시지)으로만 수신하는 안전한 모드입니다.\n'
+                      '• 나중에 "시간대" / "앞으로 N시간" 설정으로 자동 매너모드 유지 기능을 제공할 예정입니다.\n'
+                      '• 기본값은 매너모드로 시작하는 것을 권장합니다.',
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: Column(
+                children: [
+                  const ListTile(
+                    title: Text(
+                      '현재 정책 상태 (Feature Flags)',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    title: const Text(
+                      'Android 즉시 재생 (androidInstantPlay)',
+                    ),
+                    trailing: Text(
+                      FF.androidInstantPlay ? 'ON' : 'OFF',
+                    ),
+                  ),
+                  ListTile(
+                    title: const Text(
+                      'iOS A안 (APNs → 탭 → 재생) (iosModeA_PushTapPlay)',
+                    ),
+                    trailing: Text(
+                      FF.iosModeA_PushTapPlay ? 'ON' : 'OFF',
+                    ),
+                  ),
+                  ListTile(
+                    title: const Text(
+                      'iOS B안 (PushToTalk Framework) (iosModeB_PTTFramework)',
+                    ),
+                    trailing: Text(
+                      FF.iosModeB_PTTFramework ? 'ON' : 'OFF',
+                    ),
+                  ),
+                  ListTile(
+                    title: const Text(
+                      'iOS VoIP + CallKit (callKitVoip)',
+                    ),
+                    trailing: Text(
+                      FF.callKitVoip ? 'ON' : 'OFF',
+                    ),
+                  ),
+                  ListTile(
+                    title: const Text(
+                      'TURN 443 강제 (forceTurnTcpTls443)',
+                    ),
+                    trailing: Text(
+                      FF.forceTurnTcpTls443 ? 'ON' : 'OFF',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: Column(
+                children: [
+                  const ListTile(
+                    title: Text(
+                      '실험적 옵션 (아직 실제 동작 없음)',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    subtitle: Text(
+                      '향후 PTT UX를 튜닝할 때 사용할 수 있는 옵션들입니다. 현재는 UI에서만 on/off가 바뀌고 실제 PTT 로직에는 영향을 주지 않습니다.',
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  SwitchListTile(
+                    title: const Text('PTT 시작 전 짧은 비프음 재생'),
+                    value: beepOnStart,
+                    onChanged: (value) {
+                      ref.read(_beepOnStartProvider.notifier).state =
+                          value;
+                    },
+                  ),
+                  SwitchListTile(
+                    title: const Text('PTT 종료 후 짧은 비프음 재생'),
+                    value: beepOnEnd,
+                    onChanged: (value) {
+                      ref.read(_beepOnEndProvider.notifier).state = value;
+                    },
+                  ),
+                  SwitchListTile(
+                    title: const Text('무전모드에서만 진동 허용'),
+                    value: vibrateInWalkie,
+                    onChanged: (value) {
+                      ref
+                          .read(_vibrateInWalkieProvider.notifier)
+                          .state = value;
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
-

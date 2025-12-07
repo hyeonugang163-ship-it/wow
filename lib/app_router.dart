@@ -1,4 +1,5 @@
 import 'package:go_router/go_router.dart';
+import 'package:voyage/chat_list_page.dart';
 import 'package:voyage/chat_page.dart';
 import 'package:voyage/friends_page.dart';
 import 'package:voyage/ptt_home_page.dart';
@@ -17,6 +18,11 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) => const FriendsPage(),
     ),
     GoRoute(
+      path: '/chats',
+      name: 'chats',
+      builder: (context, state) => const ChatListPage(),
+    ),
+    GoRoute(
       path: '/chat/:id',
       name: 'chat',
       builder: (context, state) {
@@ -31,4 +37,3 @@ final GoRouter appRouter = GoRouter(
     ),
   ],
 );
-

@@ -1,0 +1,175 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:just_audio/just_audio.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:record/record.dart';
+
+class PttLocalAudioEngine {
+  PttLocalAudioEngine()
+      : _recorder = AudioRecorder(),
+        _player = AudioPlayer();
+
+  final AudioRecorder _recorder;
+  final AudioPlayer _player;
+
+  bool _initialized = false;
+
+  /// Absolute path for the current recording file, if any.
+  String? _currentFilePath;
+
+  bool get _isSupportedPlatform =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+
+  Future<void> init() async {
+    if (!_isSupportedPlatform) {
+      debugPrint(
+        '[PTT][LocalAudio] init skipped: unsupported platform',
+      );
+      return;
+    }
+    if (_initialized) return;
+
+    try {
+      final hasPermission = await _recorder.hasPermission();
+      if (!hasPermission) {
+        debugPrint(
+          '[PTT][LocalAudio] no microphone permission on init',
+        );
+      }
+    } catch (e) {
+      debugPrint('[PTT][LocalAudio] init error: $e');
+    }
+
+    _initialized = true;
+  }
+
+  Future<void> startRecording() async {
+    if (!_isSupportedPlatform) {
+      debugPrint(
+        '[PTT][LocalAudio] startRecording skipped: unsupported platform',
+      );
+      return;
+    }
+
+    try {
+      if (!_initialized) {
+        await init();
+      }
+
+      final hasPermission = await _recorder.hasPermission();
+      if (!hasPermission) {
+        debugPrint(
+          '[PTT][LocalAudio] startRecording: no microphone permission',
+        );
+        return;
+      }
+
+      final isRecording = await _recorder.isRecording();
+      if (isRecording) {
+        await _recorder.stop();
+      }
+
+      const config = RecordConfig(
+        encoder: AudioEncoder.aacLc,
+        numChannels: 1,
+        sampleRate: 16000,
+      );
+
+      // Use an app-internal writable directory for recordings.
+      final baseDir = await getTemporaryDirectory();
+      final recordingsDir = Directory('${baseDir.path}/ptt');
+      if (!recordingsDir.existsSync()) {
+        await recordingsDir.create(recursive: true);
+      }
+
+      final fileName =
+          'ptt_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      final fullPath = '${recordingsDir.path}/$fileName';
+
+      _currentFilePath = fullPath;
+
+      // Log file name only, avoiding full path in logs.
+      debugPrint(
+        '[PTT][LocalAudio] startRecording file=$fileName',
+      );
+
+      await _recorder.start(config, path: fullPath);
+    } catch (e) {
+      debugPrint('[PTT][LocalAudio] startRecording error: $e');
+      _currentFilePath = null;
+    }
+  }
+
+  Future<String?> stopRecordingAndGetPath() async {
+    if (!_isSupportedPlatform) {
+      debugPrint(
+        '[PTT][LocalAudio] stopRecording skipped: unsupported platform',
+      );
+      return null;
+    }
+
+    if (_currentFilePath == null) {
+      // Nothing to stop / no known file path.
+      try {
+        await _recorder.stop();
+      } catch (_) {
+        // ignore
+      }
+      debugPrint(
+        '[PTT][LocalAudio] stopRecording: no current file path',
+      );
+      return null;
+    }
+
+    try {
+      // Stop the recorder; we ignore the returned path and use our own.
+      await _recorder.stop();
+
+      final path = _currentFilePath;
+      _currentFilePath = null;
+
+      if (path == null || path.isEmpty) {
+        debugPrint(
+          '[PTT][LocalAudio] stopRecording: path is null/empty after stop',
+        );
+        return null;
+      }
+      debugPrint(
+        '[PTT][LocalAudio] stopRecordingAndGetPath hasPath=true',
+      );
+      return path;
+    } catch (e) {
+      debugPrint('[PTT][LocalAudio] stopRecording error: $e');
+      _currentFilePath = null;
+      return null;
+    }
+  }
+
+  Future<void> playFromPath(String path) async {
+    if (!_isSupportedPlatform) {
+      debugPrint(
+        '[PTT][LocalAudio] playFromPath skipped: unsupported platform',
+      );
+      return;
+    }
+
+    try {
+      await _player.stop();
+      await _player.setFilePath(path);
+      await _player.play();
+    } catch (e) {
+      debugPrint('[PTT][LocalAudio] playFromPath error: $e');
+    }
+  }
+
+  Future<void> dispose() async {
+    try {
+      await _player.dispose();
+    } catch (e) {
+      debugPrint('[PTT][LocalAudio] dispose error: $e');
+    }
+  }
+}
