@@ -140,6 +140,15 @@ class PttController {
 
     final mode = ctx?.mode;
 
+    final hasRecordedPath =
+        recordedPath != null && recordedPath.isNotEmpty;
+    final modeName = mode == PttMode.walkie ? 'walkie' : 'manner';
+    print(
+      '[PTT][stopTalk] mode=$modeName '
+      'hasPath=$hasRecordedPath '
+      'target_friend_id=$targetIdLabel',
+    );
+
     // 즉시 재생은 walkie 모드에서만 수행
     if (mode == PttMode.walkie && recordedPath != null) {
       await _localAudio.playFromPath(recordedPath);
@@ -200,8 +209,8 @@ class _NoopVoiceTransport implements VoiceTransport {
   }
 }
 
-final pttControllerProvider =
-    StateNotifierProvider<PttControllerNotifier, PttTalkState>(
+  final pttControllerProvider =
+      StateNotifierProvider<PttControllerNotifier, PttTalkState>(
   (ref) {
     final localAudio = ref.read(pttLocalAudioEngineProvider);
     return PttControllerNotifier(
@@ -211,6 +220,27 @@ final pttControllerProvider =
   },
 );
 
+/// Manual test – Manner voice message flow
+///
+/// 1) Friends 화면에서 친구 B를 길게 눌러
+///    currentPttFriendIdProvider에 B.id를 설정한다.
+/// 2) 홈 화면에서 모드를 Manner로 설정한다.
+/// 3) PTT 버튼을 길게 눌러 몇 초간 말한 뒤 손을 뗀다.
+/// 4) 기대 동작:
+///    - PttLocalAudioEngine이 앱 내부 temp/ptt 디렉토리에
+///      ptt_<timestamp>.m4a 파일을 생성한다.
+///    - PttController.stopTalk()가 해당 파일 경로를 반환한다
+///      (Walkie 모드에서는 null 반환).
+///    - PttControllerNotifier.stopTalk()가
+///      ChatMessagesNotifier.addVoiceMessage(...)를 호출한다.
+///    - 친구 B와의 채팅방(ChatPage)에
+///      ChatMessageType.voice 타입 음성 메시지 버블 1개가 추가된다.
+/// 5) 로그에서 다음 키워드를 확인한다:
+///    - [PTT] startTalk ...
+///    - [PTT] stopTalk ...
+///    - [PTT][notifier.stopTalk] ...
+///    - [PTT][Manner][addVoice] ...
+///    - [Chat] voice message added ...
 class PttControllerNotifier extends StateNotifier<PttTalkState> {
   PttControllerNotifier(this._ref, this._controller)
       : super(PttTalkState.idle);
@@ -272,6 +302,15 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
     final mode = ctx?.mode;
     final targetFriendId = ctx?.targetFriendId;
 
+    final modeName = mode?.name ?? 'null';
+    final hasPath = path != null && path.isNotEmpty;
+    print(
+      '[PTT][notifier.stopTalk] '
+      'ctxMode=$modeName '
+      'target_friend_id=${targetFriendId ?? '(none)'} '
+      'hasPath=$hasPath',
+    );
+
     // 매너모드가 아니거나, 대상/녹음 경로가 없으면 아무 것도 하지 않는다.
     if (mode != PttMode.manner || targetFriendId == null || path == null) {
       return;
@@ -285,6 +324,13 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
       if (matches.isNotEmpty) {
         friendName = matches.first.name;
       }
+
+      final pathLen = path.length;
+      print(
+        '[PTT][Manner][addVoice] '
+        'chatId=$targetFriendId pathLen=$pathLen',
+      );
+
       // 매너모드: 방금 녹음한 음성을 음성 메시지(voice)로 채팅에 저장한다.
       _ref.read(chatMessagesProvider.notifier).addVoiceMessage(
             chatId: targetFriendId,
