@@ -28,11 +28,11 @@ class ChatPage extends ConsumerWidget {
       () => TextEditingController(),
     );
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Chat $chatId'),
-      ),
-      body: Column(
+	    return Scaffold(
+	      appBar: AppBar(
+	        title: Text('Chat $chatId'),
+	      ),
+	      body: Column(
         children: [
           Expanded(
             child: ListView.builder(
@@ -40,31 +40,61 @@ class ChatPage extends ConsumerWidget {
               padding:
                   const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
               itemCount: messages.length,
-              itemBuilder: (context, index) {
-                final message = messages[index];
-                final isMe = message.fromMe;
-                final alignment =
-                    isMe ? Alignment.centerRight : Alignment.centerLeft;
+	              itemBuilder: (context, index) {
+	                final message = messages[index];
+	                final isMe = message.fromMe;
+	                final alignment =
+	                    isMe ? Alignment.centerRight : Alignment.centerLeft;
 	                final baseColor =
 	                    Theme.of(context).colorScheme.secondaryContainer;
 
-                if (message.type == ChatMessageType.voice) {
+	                if (message.type == ChatMessageType.voice) {
 	                  final hasAudioPath = message.audioPath != null &&
 	                      message.audioPath!.isNotEmpty;
 	                  final isPlaying =
 	                      message.id == currentPlayingMessageId;
-                  final baseLabel =
-                      hasAudioPath ? '음성 메시지' : '음성 메시지 (파일 없음)';
-                  final durationLabel = message.durationMillis != null
-                      ? ' (${(message.durationMillis! / 1000).toStringAsFixed(1)}초)'
-                      : '';
-	                  final voiceLabel = '$baseLabel$durationLabel';
-	                  final bubbleColor = isPlaying
-	                      ? Theme.of(context).colorScheme.primaryContainer
-	                      : baseColor;
-                  return Align(
-                    alignment: alignment,
-                    child: GestureDetector(
+	                  final isError = !hasAudioPath;
+
+	                  String primaryLabel;
+	                  if (isError) {
+	                    primaryLabel = '재생 불가';
+	                  } else {
+	                    primaryLabel = '음성 메시지';
+	                  }
+
+	                  String? durationText;
+	                  final durationMillis = message.durationMillis;
+	                  if (durationMillis != null && durationMillis > 0) {
+	                    final totalSeconds = (durationMillis / 1000).round();
+	                    final minutes = totalSeconds ~/ 60;
+	                    final seconds = totalSeconds % 60;
+	                    durationText =
+	                        '$minutes:${seconds.toString().padLeft(2, '0')}';
+	                  }
+
+	                  final colorScheme = Theme.of(context).colorScheme;
+	                  final bubbleColor = isError
+	                      ? colorScheme.errorContainer
+	                      : isPlaying
+	                          ? colorScheme.primaryContainer
+	                          : baseColor;
+
+	                  IconData iconData;
+	                  Color? iconColor;
+	                  if (isError) {
+	                    iconData = Icons.error_outline;
+	                    iconColor = colorScheme.error;
+	                  } else if (isPlaying) {
+	                    iconData = Icons.pause;
+	                    iconColor = colorScheme.onPrimaryContainer;
+	                  } else {
+	                    iconData = Icons.play_arrow;
+	                    iconColor = colorScheme.onSecondaryContainer;
+	                  }
+
+	                  return Align(
+	                    alignment: alignment,
+	                    child: GestureDetector(
 	                      onTap: () async {
 	                        if (!hasAudioPath) {
 	                          debugPrint(
@@ -77,50 +107,58 @@ class ChatPage extends ConsumerWidget {
 	                            ref.read(chatVoicePlayerProvider);
 	                        final path = message.audioPath!;
 	                        try {
-	                          await player.play(
+	                          await player.togglePlay(
 	                            path: path,
 	                            messageId: message.id,
 	                          );
 	                        } catch (e) {
 	                          debugPrint(
-	                            '[Chat] failed to play voice message '
+	                            '[Chat] failed to toggle voice message '
 	                            '(hasPath=true messageId=${message.id} error=$e)',
 	                          );
 	                        }
 	                      },
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(
-                          vertical: 4,
-                          horizontal: 8,
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 8,
-                          horizontal: 12,
-                        ),
+	                      child: Container(
+	                        margin: const EdgeInsets.symmetric(
+	                          vertical: 4,
+	                          horizontal: 8,
+	                        ),
+	                        padding: const EdgeInsets.symmetric(
+	                          vertical: 8,
+	                          horizontal: 12,
+	                        ),
 	                        decoration: BoxDecoration(
 	                          color: bubbleColor,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
+	                          borderRadius: BorderRadius.circular(12),
+	                        ),
+	                        child: Row(
+	                          mainAxisSize: MainAxisSize.min,
+	                          children: [
 	                            Icon(
-	                              isPlaying
-	                                  ? Icons.equalizer
-	                                  : Icons.mic,
-	                              size: 18,
+	                              iconData,
+	                              size: 20,
+	                              color: iconColor,
 	                            ),
-                            const SizedBox(width: 4),
-                            Text(voiceLabel),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
+	                            const SizedBox(width: 6),
+	                            Text(primaryLabel),
+	                            if (durationText != null) ...[
+	                              const SizedBox(width: 8),
+	                              Text(
+	                                durationText,
+	                                style: Theme.of(context)
+	                                    .textTheme
+	                                    .bodySmall,
+	                              ),
+	                            ],
+	                          ],
+	                        ),
+	                      ),
+	                    ),
+	                  );
 	                } else {
-                  return Align(
-                    alignment: alignment,
-                    child: Container(
+	                  return Align(
+	                    alignment: alignment,
+	                    child: Container(
                       margin: const EdgeInsets.symmetric(
                         vertical: 4,
                         horizontal: 8,

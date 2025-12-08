@@ -59,13 +59,14 @@ class PttLocalAudioEngine {
         await init();
       }
 
-      final hasPermission = await _recorder.hasPermission();
-      if (!hasPermission) {
-        debugPrint(
-          '[PTT][LocalAudio] startRecording: no microphone permission',
-        );
-        return;
-      }
+	      final hasPermission = await _recorder.hasPermission();
+	      if (!hasPermission) {
+	        debugPrint(
+	          '[PTT][Permission] microphone not granted on startRecording',
+	        );
+	        _currentFilePath = null;
+	        return;
+	      }
 
       final isRecording = await _recorder.isRecording();
       if (isRecording) {
@@ -78,12 +79,20 @@ class PttLocalAudioEngine {
         sampleRate: 16000,
       );
 
-      // Use an app-internal writable directory for recordings.
-      final baseDir = await getTemporaryDirectory();
-      final recordingsDir = Directory('${baseDir.path}/ptt');
-      if (!recordingsDir.existsSync()) {
-        await recordingsDir.create(recursive: true);
-      }
+	      // Use an app-internal writable directory for recordings.
+	      final baseDir = await getTemporaryDirectory();
+	      final recordingsDir = Directory('${baseDir.path}/ptt');
+	      try {
+	        if (!recordingsDir.existsSync()) {
+	          await recordingsDir.create(recursive: true);
+	        }
+	      } catch (e) {
+	        debugPrint(
+	          '[PTT][LocalAudio] failed to create recordingsDir: $e',
+	        );
+	        _currentFilePath = null;
+	        return;
+	      }
 
       final fileName =
           'ptt_${DateTime.now().millisecondsSinceEpoch}.m4a';
@@ -131,12 +140,13 @@ class PttLocalAudioEngine {
       final path = _currentFilePath;
       _currentFilePath = null;
 
-      if (path == null || path.isEmpty) {
-        debugPrint(
-          '[PTT][LocalAudio] stopRecording: path is null/empty after stop',
-        );
-        return null;
-      }
+	      if (path == null || path.isEmpty) {
+	        debugPrint(
+	          '[PTT][LocalAudio] stopRecording: no path '
+	          '(maybe permission denied or encoder error)',
+	        );
+	        return null;
+	      }
       debugPrint(
         '[PTT][LocalAudio] stopRecordingAndGetPath hasPath=true',
       );
@@ -162,6 +172,21 @@ class PttLocalAudioEngine {
       await _player.play();
     } catch (e) {
       debugPrint('[PTT][LocalAudio] playFromPath error: $e');
+    }
+  }
+
+  Future<void> stopPlayback() async {
+    if (!_isSupportedPlatform) {
+      debugPrint(
+        '[PTT][LocalAudio] stopPlayback skipped: unsupported platform',
+      );
+      return;
+    }
+
+    try {
+      await _player.stop();
+    } catch (e) {
+      debugPrint('[PTT][LocalAudio] stopPlayback error: $e');
     }
   }
 
