@@ -241,12 +241,37 @@ class _NoopVoiceTransport implements VoiceTransport {
 ///    - [PTT][notifier.stopTalk] ...
 ///    - [PTT][Manner][addVoice] ...
 ///    - [Chat] voice message added ...
+///
+/// Manual test – PTT policy (allow / block / cooldown)
+///
+/// 1) 친구 A를 Friends 화면에서 PTT 대상으로 설정한다.
+/// 2) Friends > 더보기(⋮)에서 다음 케이스를 각각 테스트:
+///    a) 무전 허용 ON, 차단 OFF:
+///       - Walkie 모드에서 PTT → 즉시 재생 PTT 동작.
+///    b) 무전 허용 OFF, 차단 OFF:
+///       - Walkie 모드에서 PTT → 내부적으로 Manner로 다운그레이드되어
+///         채팅에 음성 노트가 쌓이고, 즉시 재생은 하지 않을 수 있다.
+///    c) 차단 ON:
+///       - Walkie/Manner 모두에서 PTT 버튼을 눌러도 녹음/전송이 시작되지 않는다.
+///       - 로그에 [PTT][Policy] startTalk blocked by friendBlock ... 이 찍힌다.
+/// 3) 동일 친구에 대해 빠르게 여러 번 PTT를 눌러,
+///    쿨다운(minIntervalMs)으로 [PTT][RateLimit] startTalk blocked by cooldown ...
+///    로그가 찍히는지도 확인한다.
 class PttControllerNotifier extends StateNotifier<PttTalkState> {
   PttControllerNotifier(this._ref, this._controller)
       : super(PttTalkState.idle);
 
   final Ref _ref;
   final PttController _controller;
+
+  /// Last time PTT was started (for global cooldown).
+  DateTime? _lastPttStartedAt;
+
+  /// Recent PTT start timestamps per friend for soft rate-limit logging.
+  ///
+  /// Used only for analytics / future policy hooks; 현재 단계에서는
+  /// 실제 블록 대신 로그만 남긴다.
+  final Map<String, List<DateTime>> _friendPttStarts = {};
 
   Future<void> startTalk() async {
     final requestedMode = _ref.read(pttModeProvider);
@@ -256,6 +281,59 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
     var friendAllowed = false;
     if (targetFriendId != null) {
       friendAllowed = pttAllowMap[targetFriendId] ?? false;
+    }
+
+    final blockMap = _ref.read(friendBlockProvider);
+    var friendBlocked = false;
+    if (targetFriendId != null) {
+      friendBlocked = blockMap[targetFriendId] ?? false;
+    }
+
+    if (friendBlocked) {
+      print(
+        '[PTT][Policy] startTalk blocked by friendBlock '
+        'friendId=$targetFriendId',
+      );
+      return;
+    }
+
+    final now = DateTime.now();
+    final minIntervalMs = FF.pttMinIntervalMillis;
+    if (_lastPttStartedAt != null && minIntervalMs > 0) {
+      final sinceLastMs =
+          now.millisecondsSinceEpoch -
+              _lastPttStartedAt!.millisecondsSinceEpoch;
+      if (sinceLastMs < minIntervalMs) {
+        print(
+          '[PTT][RateLimit] startTalk blocked by cooldown '
+          'sinceLastMs=$sinceLastMs '
+          'minIntervalMs=$minIntervalMs '
+          'friendId=${targetFriendId ?? '(none)'}',
+        );
+        return;
+      }
+    }
+
+    if (targetFriendId != null) {
+      final windowSeconds = 60;
+      const softLimit = 20;
+
+      final previous = _friendPttStarts[targetFriendId] ?? <DateTime>[];
+      final recent = previous
+          .where(
+            (t) => now.difference(t).inSeconds < windowSeconds,
+          )
+          .toList();
+      recent.add(now);
+      _friendPttStarts[targetFriendId] = recent;
+
+      if (recent.length > softLimit) {
+        print(
+          '[PTT][RateLimit] friend burst friendId=$targetFriendId '
+          'count=${recent.length} windowSeconds=$windowSeconds',
+        );
+        // TODO: hard block or soft warn on too many PTT in short time.
+      }
     }
 
     var effectiveMode = requestedMode;
@@ -282,6 +360,7 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
       '[PTT] notifier.startTalk: '
       'requestedMode=$requestedLabel '
       'friendAllowed=$friendAllowed '
+      'cooldownOk=true '
       'effectiveMode=$effectiveLabel '
       'target_friend_id=${targetFriendId ?? '(none)'}',
     );
@@ -291,6 +370,7 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
       targetFriendId: targetFriendId,
       targetFriendName: targetFriendName,
     );
+    _lastPttStartedAt = now;
     state = PttTalkState.talking;
   }
 

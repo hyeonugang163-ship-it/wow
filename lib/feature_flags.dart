@@ -9,6 +9,7 @@ class PolicyConfig {
   final bool iosModeB_PTTFramework; // iOS B안(PushToTalk) 활성
   final bool callKitVoip; // iOS VoIP Push + CallKit 사용 여부
   final bool forceTurnTcpTls443; // TURN 443 강제 여부
+  final int pttMinIntervalMillis; // PTT 호출 간 최소 간격(ms) - 글로벌 쿨다운
 
   const PolicyConfig({
     required this.androidInstantPlay,
@@ -16,6 +17,7 @@ class PolicyConfig {
     required this.iosModeB_PTTFramework,
     required this.callKitVoip,
     required this.forceTurnTcpTls443,
+    required this.pttMinIntervalMillis,
   });
 
   factory PolicyConfig.fromJson(Map<String, dynamic> json) {
@@ -26,6 +28,8 @@ class PolicyConfig {
       callKitVoip: (json['callKitVoip'] as bool?) ?? false,
       forceTurnTcpTls443:
           (json['forceTurnTcpTls443'] as bool?) ?? false,
+      pttMinIntervalMillis:
+          (json['pttMinIntervalMillis'] as int?) ?? 300,
     );
   }
 
@@ -35,6 +39,7 @@ class PolicyConfig {
     iosModeB_PTTFramework: false,
     callKitVoip: false,
     forceTurnTcpTls443: false,
+    pttMinIntervalMillis: 300,
   );
 
   PolicyConfig copyWith({
@@ -43,6 +48,7 @@ class PolicyConfig {
     bool? iosModeB_PTTFramework,
     bool? callKitVoip,
     bool? forceTurnTcpTls443,
+    int? pttMinIntervalMillis,
   }) {
     return PolicyConfig(
       androidInstantPlay: androidInstantPlay ?? this.androidInstantPlay,
@@ -53,6 +59,8 @@ class PolicyConfig {
       callKitVoip: callKitVoip ?? this.callKitVoip,
       forceTurnTcpTls443:
           forceTurnTcpTls443 ?? this.forceTurnTcpTls443,
+      pttMinIntervalMillis:
+          pttMinIntervalMillis ?? this.pttMinIntervalMillis,
     );
   }
 }
@@ -96,5 +104,5 @@ class FF {
   static bool get iosModeB_PTTFramework => policy.iosModeB_PTTFramework;
   static bool get callKitVoip => policy.callKitVoip;
   static bool get forceTurnTcpTls443 => policy.forceTurnTcpTls443;
+  static int get pttMinIntervalMillis => policy.pttMinIntervalMillis;
 }
-

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyage/friend.dart';
 
@@ -46,3 +47,36 @@ final friendPttAllowProvider =
     StateNotifierProvider<FriendPttAllowNotifier, Map<String, bool>>(
   (ref) => FriendPttAllowNotifier(),
 );
+
+class FriendBlockNotifier extends StateNotifier<Map<String, bool>> {
+  FriendBlockNotifier() : super(const {});
+
+  void setBlocked(String friendId, bool blocked) {
+    final next = Map<String, bool>.from(state);
+    if (blocked) {
+      next[friendId] = true;
+    } else {
+      next.remove(friendId);
+    }
+    state = next;
+  }
+
+  bool isBlocked(String friendId) {
+    return state[friendId] ?? false;
+  }
+}
+
+final friendBlockProvider =
+    StateNotifierProvider<FriendBlockNotifier, Map<String, bool>>(
+  (ref) => FriendBlockNotifier(),
+);
+
+void reportFriendAbuse({
+  required String friendId,
+  String reason = 'manual_report',
+}) {
+  final timestamp = DateTime.now().toIso8601String();
+  debugPrint(
+    '[Safety][Report] friendId=$friendId reason=$reason timestamp=$timestamp',
+  );
+}

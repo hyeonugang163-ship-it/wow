@@ -1,18 +1,19 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:voyage/chat_state.dart';
 import 'package:voyage/ptt_local_audio.dart';
 
-/// Manual test – voice bubble UX
-///
-/// 1) Manner 모드에서 친구1(u1)에게 음성 메시지 2개를 전송한다.
-/// 2) 친구1 채팅방으로 들어가면 음성 버블 2개가 보인다.
-/// 3) 첫 번째 버블을 탭하면:
+/// Manual test – voice bubble playback UX
+/// 1) Manner 모드에서 친구 A에게 음성 메시지 2개를 보낸다.
+/// 2) 친구 A 채팅방에 음성 버블 2개가 표시되는지 확인한다.
+/// 3) 첫 번째 버블을 탭:
 ///    - 아이콘이 ▶ 에서 ⏸ 로 바뀌고,
-///    - [ChatVoicePlayer] onTap / play requested 로그가 찍힌다.
-/// 4) 다시 탭하면 재생이 멈추고 아이콘이 ▶ 로 돌아온다.
-/// 5) 두 번째 버블도 동일하게 동작하는지 확인한다.
-/// 6) 파일이 없는 path를 가진 메시지를 만들면,
-///    탭 시 재생 시도 대신 에러 로그만 찍히는지 확인한다.
+///    - 실제 오디오가 재생되며,
+///    - 로그에 [ChatVoicePlayer] play start ... 가 찍힌다.
+/// 4) 다시 탭하면 재생이 멈추고, 아이콘이 ▶ 로 돌아온다.
+/// 5) 두 번째 버블에서도 동일하게 동작하는지 확인한다.
+/// 6) (선택) 파일을 삭제하거나 존재하지 않는 path를 가진 메시지를 만들어
+///    error 상태 아이콘/텍스트가 잘 표시되는지 확인한다.
 ///
 /// Shared local audio engine for PTT record/playback and chat playback.
 ///
@@ -30,6 +31,20 @@ final pttLocalAudioEngineProvider = Provider<PttLocalAudioEngine>((ref) {
 final currentPlayingVoiceMessageIdProvider = StateProvider<String?>(
   (ref) => null,
 );
+
+/// Voice messages that hit a playback error.
+///
+/// Used to render ⚠ + "재생 실패" 상태 in the UI.
+final voicePlaybackErrorMessageIdsProvider = StateProvider<Set<String>>(
+  (ref) => <String>{},
+);
+
+/// Simple playback state for logging and reasoning.
+enum VoicePlayState {
+  idle,
+  playing,
+  error,
+}
 
 class ChatVoicePlayer {
   ChatVoicePlayer(this._ref, this._localAudio);
@@ -53,30 +68,80 @@ class ChatVoicePlayer {
       return;
     }
 
+    if (messageId != null) {
+      final errorNotifier =
+          _ref.read(voicePlaybackErrorMessageIdsProvider.notifier);
+      if (errorNotifier.state.contains(messageId)) {
+        final cleared = <String>{...errorNotifier.state}..remove(messageId);
+        errorNotifier.state = cleared;
+      }
+    }
+
     final requestId = ++_playRequestId;
 
     try {
       await _localAudio.init();
-      _ref.read(currentPlayingVoiceMessageIdProvider.notifier).state =
-          messageId;
+      final globalNotifier =
+          _ref.read(currentPlayingVoiceMessageIdProvider.notifier);
+      final oldId = globalNotifier.state;
+      if (oldId != messageId) {
+        globalNotifier.state = messageId;
+        debugPrint(
+          '[ChatVoicePlayer] global playing id changed old=$oldId new=$messageId',
+        );
+      }
       debugPrint(
-        '[ChatVoicePlayer] play start '
-        '(messageId=$messageId)',
+        '[ChatVoicePlayer] play start path=$path messageId=$messageId',
       );
-      await _localAudio.playFromPath(path);
+      final startedAt = DateTime.now();
+      await _localAudio.playFromPath(
+        path,
+        rethrowOnError: true,
+      );
+
+      // Prefer engine-reported duration; fall back to elapsed wall-clock.
+      final durationFromEngine =
+          _localAudio.lastPlaybackDurationMillis;
+      final elapsedMillis =
+          DateTime.now().difference(startedAt).inMilliseconds;
+      final effectiveDurationMillis =
+          durationFromEngine ?? elapsedMillis;
+
+      if (messageId != null && effectiveDurationMillis > 0) {
+        _ref
+            .read(chatMessagesProvider.notifier)
+            .updateVoiceMessageDuration(
+              messageId: messageId,
+              durationMillis: effectiveDurationMillis,
+            );
+      }
+
       debugPrint(
-        '[ChatVoicePlayer] play completed '
-        '(messageId=$messageId)',
+        '[ChatVoicePlayer] play completed path=$path messageId=$messageId',
       );
     } catch (e) {
       debugPrint(
-        '[ChatVoicePlayer] play error '
-        '(hasPath=$hasPath messageId=$messageId error=$e)',
+        '[ChatVoicePlayer] play error path=$path '
+        'messageId=$messageId error=$e',
       );
+      if (messageId != null) {
+        final errorNotifier =
+            _ref.read(voicePlaybackErrorMessageIdsProvider.notifier);
+        final next = <String>{...errorNotifier.state, messageId};
+        errorNotifier.state = next;
+      }
     } finally {
       // Only clear if this is the latest play request.
       if (_playRequestId == requestId) {
-        _ref.read(currentPlayingVoiceMessageIdProvider.notifier).state = null;
+        final globalNotifier =
+            _ref.read(currentPlayingVoiceMessageIdProvider.notifier);
+        final oldId = globalNotifier.state;
+        if (oldId != null) {
+          globalNotifier.state = null;
+          debugPrint(
+            '[ChatVoicePlayer] global playing id changed old=$oldId new=null',
+          );
+        }
       }
     }
   }
@@ -85,17 +150,23 @@ class ChatVoicePlayer {
     required String path,
     required String messageId,
   }) async {
-    final currentId =
-        _ref.read(currentPlayingVoiceMessageIdProvider);
+    final currentId = _ref.read(currentPlayingVoiceMessageIdProvider);
     final hasPath = path.isNotEmpty;
 
+    final stateBefore = !hasPath
+        ? VoicePlayState.error
+        : (currentId == messageId
+            ? VoicePlayState.playing
+            : VoicePlayState.idle);
+    final isPlayingBefore = stateBefore == VoicePlayState.playing;
+
     debugPrint(
-      '[ChatVoicePlayer] onTap messageId=$messageId '
-      'stateBefore=${currentId == messageId ? 'playing' : 'idle'} '
-      'hasPath=$hasPath',
+      '[ChatVoicePlayer] tap messageId=$messageId '
+      'isPlayingBefore=$isPlayingBefore path=$path',
     );
 
     if (!hasPath) {
+      // TODO: handle VoicePlayState.error tap (e.g. surface retry UI).
       return;
     }
 
@@ -110,8 +181,15 @@ class ChatVoicePlayer {
           '[ChatVoicePlayer] stop error messageId=$messageId error=$e',
         );
       } finally {
-        _ref.read(currentPlayingVoiceMessageIdProvider.notifier).state =
-            null;
+        final globalNotifier =
+            _ref.read(currentPlayingVoiceMessageIdProvider.notifier);
+        final oldId = globalNotifier.state;
+        if (oldId != null) {
+          globalNotifier.state = null;
+          debugPrint(
+            '[ChatVoicePlayer] global playing id changed old=$oldId new=null',
+          );
+        }
       }
       return;
     }

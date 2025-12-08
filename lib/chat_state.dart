@@ -64,6 +64,39 @@ class ChatMessagesNotifier extends StateNotifier<List<ChatMessage>> {
     );
   }
 
+  void updateVoiceMessageDuration({
+    required String messageId,
+    required int durationMillis,
+  }) {
+    var updated = false;
+    state = state.map((message) {
+      if (message.id == messageId &&
+          message.type == ChatMessageType.voice) {
+        updated = true;
+        return ChatMessage(
+          id: message.id,
+          chatId: message.chatId,
+          text: message.text,
+          fromMe: message.fromMe,
+          createdAt: message.createdAt,
+          type: message.type,
+          audioPath: message.audioPath,
+          durationMillis: durationMillis,
+        );
+      }
+      return message;
+    }).toList();
+
+    if (updated) {
+      // 메타데이터 위주 로그 (내용/경로는 남기지 않음).
+      // ignore: avoid_print
+      print(
+        '[Chat] voice duration updated '
+        'messageId=$messageId durationMillis=$durationMillis',
+      );
+    }
+  }
+
   List<ChatMessage> messagesForChat(String chatId) {
     return state.where((m) => m.chatId == chatId).toList();
   }

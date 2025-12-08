@@ -18,6 +18,12 @@ class PttLocalAudioEngine {
   /// Absolute path for the current recording file, if any.
   String? _currentFilePath;
 
+  /// Duration of the last successfully prepared playback, if any.
+  Duration? _lastPlaybackDuration;
+
+  int? get lastPlaybackDurationMillis =>
+      _lastPlaybackDuration?.inMilliseconds;
+
   bool get _isSupportedPlatform =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
@@ -158,7 +164,10 @@ class PttLocalAudioEngine {
     }
   }
 
-  Future<void> playFromPath(String path) async {
+  Future<void> playFromPath(
+    String path, {
+    bool rethrowOnError = false,
+  }) async {
     if (!_isSupportedPlatform) {
       debugPrint(
         '[PTT][LocalAudio] playFromPath skipped: unsupported platform',
@@ -166,12 +175,18 @@ class PttLocalAudioEngine {
       return;
     }
 
+    _lastPlaybackDuration = null;
+
     try {
       await _player.stop();
       await _player.setFilePath(path);
+      _lastPlaybackDuration = _player.duration;
       await _player.play();
     } catch (e) {
       debugPrint('[PTT][LocalAudio] playFromPath error: $e');
+      if (rethrowOnError) {
+        rethrow;
+      }
     }
   }
 
