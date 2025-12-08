@@ -1,3 +1,7 @@
+// NOTE: 설계도 v1.1 기준 PTT 홈/버튼 UX를 담당하며, 최소 1초 홀드 후에만 startTalk를 호출하도록 구현되어 있다.
+
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
@@ -6,13 +10,27 @@ import 'package:voyage/feature_flags.dart';
 import 'package:voyage/friend_state.dart';
 import 'package:voyage/ptt_controller.dart';
 
-class PttHomePage extends ConsumerWidget {
+/// Minimum hold duration before PTT actually starts.
+///
+/// TODO: move to PolicyConfig / FeatureFlags if we need
+/// platform- or market-specific tuning.
+const Duration kPttMinHoldDuration = Duration(milliseconds: 1000);
+
+class PttHomePage extends ConsumerStatefulWidget {
   const PttHomePage({super.key});
 
-  Future<void> _handlePressStart(
-    BuildContext context,
-    WidgetRef ref,
-  ) async {
+  @override
+  ConsumerState<PttHomePage> createState() => _PttHomePageState();
+}
+
+class _PttHomePageState extends ConsumerState<PttHomePage> {
+  DateTime? _pressStartedAt;
+  bool _hasStartedTalk = false;
+  bool _isPressed = false;
+  Timer? _holdTimer;
+
+  Future<void> _handlePressStart(BuildContext context) async {
+    final ref = this.ref;
     final mode = ref.read(pttModeProvider);
     final currentFriendId = ref.read(currentPttFriendIdProvider);
     final pttAllowMap = ref.read(friendPttAllowProvider);
@@ -54,10 +72,8 @@ class PttHomePage extends ConsumerWidget {
     await ref.read(pttControllerProvider.notifier).startTalk();
   }
 
-  Future<void> _handlePressEnd(
-    BuildContext context,
-    WidgetRef ref,
-  ) async {
+  Future<void> _handlePressEnd(BuildContext context) async {
+    final ref = this.ref;
     final mode = ref.read(pttModeProvider);
     final currentFriendId = ref.read(currentPttFriendIdProvider);
 
@@ -68,8 +84,66 @@ class PttHomePage extends ConsumerWidget {
     await ref.read(pttControllerProvider.notifier).stopTalk();
   }
 
+  void _onPressDown(BuildContext context) {
+    _pressStartedAt = DateTime.now();
+    _hasStartedTalk = false;
+    _isPressed = true;
+    _holdTimer?.cancel();
+
+    debugPrint('[PTT][UI] press down');
+
+    _holdTimer = Timer(kPttMinHoldDuration, () async {
+      if (!_isPressed || _hasStartedTalk) {
+        return;
+      }
+      _hasStartedTalk = true;
+      debugPrint(
+        '[PTT][UI] hold satisfied, calling startTalk',
+      );
+      await _handlePressStart(context);
+    });
+  }
+
+  Future<void> _onPressEnd(BuildContext context) async {
+    _isPressed = false;
+    _holdTimer?.cancel();
+    final startedAt = _pressStartedAt;
+    _pressStartedAt = null;
+
+    if (_hasStartedTalk) {
+      await _handlePressEnd(context);
+      return;
+    }
+
+    final heldMs = startedAt == null
+        ? 0
+        : DateTime.now().difference(startedAt).inMilliseconds;
+    debugPrint(
+      '[PTT][UI] press too short (<minHold), '
+      'heldMs=$heldMs minHoldMs=${kPttMinHoldDuration.inMilliseconds}',
+    );
+
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          '무전은 버튼을 1초 이상 꾹 누르고 말해 주세요.',
+        ),
+      ),
+    );
+  }
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  void dispose() {
+    _holdTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ref = this.ref;
     final talkState = ref.watch(pttControllerProvider);
     final isTalking = talkState == PttTalkState.talking;
     final mode = ref.watch(pttModeProvider);
@@ -180,12 +254,9 @@ class PttHomePage extends ConsumerWidget {
             Expanded(
               child: Center(
                 child: GestureDetector(
-                  onTapDown: (_) async =>
-                      await _handlePressStart(context, ref),
-                  onTapUp: (_) async =>
-                      await _handlePressEnd(context, ref),
-                  onTapCancel: () async =>
-                      await _handlePressEnd(context, ref),
+                  onTapDown: (_) => _onPressDown(context),
+                  onTapUp: (_) async => _onPressEnd(context),
+                  onTapCancel: () async => _onPressEnd(context),
                   child: Container(
                     width: 180,
                     height: 180,

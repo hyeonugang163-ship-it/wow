@@ -1,3 +1,5 @@
+// NOTE: 설계도 v1.1 기준 PolicyConfig/FF 구조와 거의 일치하며, PTT 쿨다운/Android FGS 플래그를 추가로 포함한다.
+
 enum PttMode {
   walkie, // 무전모드 (즉시 재생 시도)
   manner, // 매너모드 (녹음본 수신)
@@ -5,6 +7,7 @@ enum PttMode {
 
 class PolicyConfig {
   final bool androidInstantPlay; // Android FGS 즉시 재생 허용 여부
+  final bool enableAndroidPttForegroundService; // Android PTT ForegroundService 사용 여부
   final bool iosModeA_PushTapPlay; // iOS A안 활성
   final bool iosModeB_PTTFramework; // iOS B안(PushToTalk) 활성
   final bool callKitVoip; // iOS VoIP Push + CallKit 사용 여부
@@ -13,6 +16,7 @@ class PolicyConfig {
 
   const PolicyConfig({
     required this.androidInstantPlay,
+    required this.enableAndroidPttForegroundService,
     required this.iosModeA_PushTapPlay,
     required this.iosModeB_PTTFramework,
     required this.callKitVoip,
@@ -23,6 +27,8 @@ class PolicyConfig {
   factory PolicyConfig.fromJson(Map<String, dynamic> json) {
     return PolicyConfig(
       androidInstantPlay: (json['androidInstantPlay'] as bool?) ?? true,
+      enableAndroidPttForegroundService:
+          (json['enableAndroidPttForegroundService'] as bool?) ?? true,
       iosModeA_PushTapPlay: (json['iosModeA_PushTapPlay'] as bool?) ?? true,
       iosModeB_PTTFramework: (json['iosModeB_PTTFramework'] as bool?) ?? false,
       callKitVoip: (json['callKitVoip'] as bool?) ?? false,
@@ -35,6 +41,7 @@ class PolicyConfig {
 
   static const PolicyConfig defaultConfig = PolicyConfig(
     androidInstantPlay: true,
+    enableAndroidPttForegroundService: true,
     iosModeA_PushTapPlay: true,
     iosModeB_PTTFramework: false,
     callKitVoip: false,
@@ -44,6 +51,7 @@ class PolicyConfig {
 
   PolicyConfig copyWith({
     bool? androidInstantPlay,
+    bool? enableAndroidPttForegroundService,
     bool? iosModeA_PushTapPlay,
     bool? iosModeB_PTTFramework,
     bool? callKitVoip,
@@ -52,6 +60,9 @@ class PolicyConfig {
   }) {
     return PolicyConfig(
       androidInstantPlay: androidInstantPlay ?? this.androidInstantPlay,
+      enableAndroidPttForegroundService:
+          enableAndroidPttForegroundService ??
+              this.enableAndroidPttForegroundService,
       iosModeA_PushTapPlay:
           iosModeA_PushTapPlay ?? this.iosModeA_PushTapPlay,
       iosModeB_PTTFramework:
@@ -100,6 +111,8 @@ class FF {
 
   // 편의 getter
   static bool get androidInstantPlay => policy.androidInstantPlay;
+  static bool get enableAndroidPttForegroundService =>
+      policy.enableAndroidPttForegroundService;
   static bool get iosModeA_PushTapPlay => policy.iosModeA_PushTapPlay;
   static bool get iosModeB_PTTFramework => policy.iosModeB_PTTFramework;
   static bool get callKitVoip => policy.callKitVoip;

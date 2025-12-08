@@ -1,3 +1,5 @@
+// NOTE: 설계도 v1.1 기준 VoiceTransport를 따르는 로컬 테스트용 Fake 구현 (실제 네트워크 전송은 수행하지 않음).
+
 import 'dart:async';
 
 import 'voice_transport.dart';

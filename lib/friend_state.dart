@@ -1,3 +1,6 @@
+// NOTE: 설계도 v1.1 기준 친구 리스트/무전 허용/차단 상태를 관리하며,
+// Block 상태에 따라 Walkie/Manner PTT가 막히도록 사용된다.
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyage/friend.dart';

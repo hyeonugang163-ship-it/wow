@@ -1,3 +1,4 @@
+<!-- NOTE: 설계도 v1.1 기준 Android 권한/FGS/딥링크 설정이 거의 일치하며, PttService를 microphone|mediaPlayback FGS로 선언한다. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />

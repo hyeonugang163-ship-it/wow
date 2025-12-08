@@ -1,3 +1,5 @@
+// NOTE: 설계도 v1.1 기준 로컬 오디오 엔진 역할을 하며, 녹음/재생을 PTT/Manner 공통으로 제공한다.
+
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';

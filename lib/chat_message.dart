@@ -1,3 +1,5 @@
+// NOTE: 설계도 v1.1 기준 ChatMessage(text/voice + durationMillis)를 단순한 DTO로 구현한 상태다.
+
 enum ChatMessageType {
   text,
   voice,

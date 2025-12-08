@@ -1,3 +1,5 @@
+// NOTE: 설계도 v1.1 기준 VoiceTransport 인터페이스와 일치하며, 현재는 No-op/Fake 구현만 사용한다.
+
 abstract class VoiceTransport {
   Future<void> connect({
     required String url,
@@ -22,4 +24,3 @@ abstract class VoiceTransport {
   /// 유휴 타이머 후 완전 disconnect
   Future<void> coolDown();
 }
-

@@ -1,3 +1,5 @@
+// NOTE: 설계도 v1.1 기준 Walkie/Manner PTT 플로우를 구현하며, 쿨다운/레이트리밋 및 _isTalking 가드까지 반영된 상태다.
+
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -101,7 +103,9 @@ class PttController {
     }
     await _localAudio.startRecording();
 
-    if (isWalkie && FF.androidInstantPlay) {
+    if (isWalkie &&
+        FF.androidInstantPlay &&
+        FF.enableAndroidPttForegroundService) {
       // 플랫폼/정책에 따라 즉시 재생 모드를 선택적으로 처리.
       await android_ptt.startPttService();
     }
@@ -154,7 +158,9 @@ class PttController {
       await _localAudio.playFromPath(recordedPath);
     }
 
-    if (mode == PttMode.walkie && FF.androidInstantPlay) {
+    if (mode == PttMode.walkie &&
+        FF.androidInstantPlay &&
+        FF.enableAndroidPttForegroundService) {
       await android_ptt.stopPttService();
     }
 
@@ -264,6 +270,9 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
   final Ref _ref;
   final PttController _controller;
 
+  /// Whether a PTT session is currently active from the notifier's view.
+  bool _isTalking = false;
+
   /// Last time PTT was started (for global cooldown).
   DateTime? _lastPttStartedAt;
 
@@ -274,6 +283,13 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
   final Map<String, List<DateTime>> _friendPttStarts = {};
 
   Future<void> startTalk() async {
+    if (_isTalking) {
+      print(
+        '[PTT][Guard] startTalk ignored because session already active',
+      );
+      return;
+    }
+
     final requestedMode = _ref.read(pttModeProvider);
     final targetFriendId = _ref.read(currentPttFriendIdProvider);
 
@@ -371,12 +387,15 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
       targetFriendName: targetFriendName,
     );
     _lastPttStartedAt = now;
+    _isTalking = true;
     state = PttTalkState.talking;
   }
 
   Future<void> stopTalk() async {
     final path = await _controller.stopTalk();
+    _isTalking = false;
     state = PttTalkState.idle;
+    print('[PTT][Guard] stopTalk finished, isTalking=false');
 
     final ctx = _controller.lastContext;
     final mode = ctx?.mode;

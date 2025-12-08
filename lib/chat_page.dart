@@ -1,3 +1,5 @@
+// NOTE: 설계도 v1.1 기준 1:1 채팅 화면으로, Manner 음성 버블 UX(재생/에러/길이/단일 재생)를 구현한다.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyage/chat_message.dart';

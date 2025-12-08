@@ -1,3 +1,5 @@
+// NOTE: 설계도 v1.1 기준 ChatMessagesNotifier(텍스트/음성 메시지 + durationMillis 업데이트)를 관리한다.
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyage/chat_message.dart';
 

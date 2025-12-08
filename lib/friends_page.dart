@@ -1,6 +1,10 @@
+// NOTE: 설계도 v1.1 기준 Friends 화면으로,
+// 무전 허용/차단/신고(Abuse) 액션을 제공한다.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:voyage/abuse.dart';
 import 'package:voyage/friend_state.dart';
 
 class FriendsPage extends ConsumerWidget {
@@ -144,11 +148,65 @@ class FriendsPage extends ConsumerWidget {
                                         color: Colors.redAccent,
                                       ),
                                       title: const Text('신고하기'),
-                                      onTap: () {
-                                        reportFriendAbuse(
-                                          friendId: friend.id,
-                                          reason: 'manual_report',
+                                      onTap: () async {
+                                        final reason =
+                                            await showDialog<AbuseReason>(
+                                          context: context,
+                                          builder: (context) {
+                                            return SimpleDialog(
+                                              title:
+                                                  const Text('신고 사유 선택'),
+                                              children: [
+                                                SimpleDialogOption(
+                                                  onPressed: () {
+                                                    Navigator.of(context).pop(
+                                                      AbuseReason.spam,
+                                                    );
+                                                  },
+                                                  child: const Text('스팸'),
+                                                ),
+                                                SimpleDialogOption(
+                                                  onPressed: () {
+                                                    Navigator.of(context).pop(
+                                                      AbuseReason.harassment,
+                                                    );
+                                                  },
+                                                  child: const Text('괴롭힘 / 폭언'),
+                                                ),
+                                                SimpleDialogOption(
+                                                  onPressed: () {
+                                                    Navigator.of(context).pop(
+                                                      AbuseReason
+                                                          .inappropriate,
+                                                    );
+                                                  },
+                                                  child: const Text('부적절한 내용'),
+                                                ),
+                                                SimpleDialogOption(
+                                                  onPressed: () {
+                                                    Navigator.of(context).pop(
+                                                      AbuseReason.other,
+                                                    );
+                                                  },
+                                                  child: const Text('기타'),
+                                                ),
+                                              ],
+                                            );
+                                          },
                                         );
+                                        if (reason == null) {
+                                          return;
+                                        }
+
+                                        await ref
+                                            .read(
+                                              abuseReportsProvider.notifier,
+                                            )
+                                            .addReport(
+                                              friendId: friend.id,
+                                              reason: reason,
+                                            );
+
                                         Navigator.of(context).pop();
                                         ScaffoldMessenger.of(context)
                                             .showSnackBar(
