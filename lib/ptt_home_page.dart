@@ -209,7 +209,7 @@ class _PttHomePageState extends ConsumerState<PttHomePage> {
     String targetStatusText;
     if (currentFriend == null) {
       targetStatusText =
-          '현재 무전 대상이 없습니다. Friends 화면에서 친구를 선택해 주세요.';
+          '현재 무전 대상이 없습니다. Friends 화면에서 친구를 길게 눌러 설정하세요.';
     } else if (friendBlocked) {
       targetStatusText =
           '현재 대상: ${currentFriend.name} (차단됨: 무전/매너 모두 전송되지 않습니다.)';

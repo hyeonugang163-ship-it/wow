@@ -33,17 +33,21 @@ class FriendsPage extends ConsumerWidget {
                   subtitle:
                       friend.status != null ? Text(friend.status!) : null,
                   trailing: IconButton(
-                        icon: const Icon(Icons.more_vert),
-                        tooltip: '친구 설정',
-                        onPressed: () {
-                          showModalBottomSheet<void>(
-                            context: context,
-                            builder: (context) {
-                              final localPttAllow = ref.watch(
-                                  friendPttAllowProvider)[friend.id] ??
-                                  false;
+                    icon: const Icon(Icons.more_vert),
+                    tooltip: '친구 설정',
+                    onPressed: () {
+                      showModalBottomSheet<void>(
+                        context: context,
+                        builder: (context) {
+                          return Consumer(
+                            builder: (context, bottomRef, _) {
+                              final localPttAllow =
+                                  bottomRef.watch(friendPttAllowProvider)[
+                                          friend.id] ??
+                                      false;
                               final localBlocked =
-                                  ref.watch(friendBlockProvider)[friend.id] ??
+                                  bottomRef.watch(friendBlockProvider)[
+                                          friend.id] ??
                                       false;
                               return Padding(
                                 padding: const EdgeInsets.symmetric(
@@ -52,7 +56,8 @@ class FriendsPage extends ConsumerWidget {
                                 ),
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
                                   children: [
                                     Text(
                                       friend.name,
@@ -76,7 +81,7 @@ class FriendsPage extends ConsumerWidget {
                                       onChanged: localBlocked
                                           ? null
                                           : (value) {
-                                              ref
+                                              bottomRef
                                                   .read(
                                                     friendPttAllowProvider
                                                         .notifier,
@@ -94,15 +99,17 @@ class FriendsPage extends ConsumerWidget {
                                       ),
                                       value: localBlocked,
                                       onChanged: (value) {
-                                        ref
+                                        bottomRef
                                             .read(
-                                                friendBlockProvider.notifier)
+                                              friendBlockProvider.notifier,
+                                            )
                                             .setBlocked(friend.id, value);
                                         if (value) {
-                                          // Optionally also turn off PTT allow.
-                                          ref
-                                              .read(friendPttAllowProvider
-                                                  .notifier)
+                                          bottomRef
+                                              .read(
+                                                friendPttAllowProvider
+                                                    .notifier,
+                                              )
                                               .setAllowed(friend.id, false);
                                         }
                                       },
@@ -122,12 +129,15 @@ class FriendsPage extends ConsumerWidget {
                                           context: context,
                                           builder: (context) {
                                             return SimpleDialog(
-                                              title:
-                                                  const Text('신고 사유 선택'),
+                                              title: const Text(
+                                                '신고 사유 선택',
+                                              ),
                                               children: [
                                                 SimpleDialogOption(
                                                   onPressed: () {
-                                                    Navigator.of(context).pop(
+                                                    Navigator.of(
+                                                      context,
+                                                    ).pop(
                                                       AbuseReason.spam,
                                                     );
                                                   },
@@ -135,24 +145,35 @@ class FriendsPage extends ConsumerWidget {
                                                 ),
                                                 SimpleDialogOption(
                                                   onPressed: () {
-                                                    Navigator.of(context).pop(
-                                                      AbuseReason.harassment,
+                                                    Navigator.of(
+                                                      context,
+                                                    ).pop(
+                                                      AbuseReason
+                                                          .harassment,
                                                     );
                                                   },
-                                                  child: const Text('괴롭힘 / 폭언'),
+                                                  child: const Text(
+                                                    '괴롭힘 / 폭언',
+                                                  ),
                                                 ),
                                                 SimpleDialogOption(
                                                   onPressed: () {
-                                                    Navigator.of(context).pop(
+                                                    Navigator.of(
+                                                      context,
+                                                    ).pop(
                                                       AbuseReason
                                                           .inappropriate,
                                                     );
                                                   },
-                                                  child: const Text('부적절한 내용'),
+                                                  child: const Text(
+                                                    '부적절한 내용',
+                                                  ),
                                                 ),
                                                 SimpleDialogOption(
                                                   onPressed: () {
-                                                    Navigator.of(context).pop(
+                                                    Navigator.of(
+                                                      context,
+                                                    ).pop(
                                                       AbuseReason.other,
                                                     );
                                                   },
@@ -166,7 +187,7 @@ class FriendsPage extends ConsumerWidget {
                                           return;
                                         }
 
-                                        await ref
+                                        await bottomRef
                                             .read(
                                               abuseReportsProvider.notifier,
                                             )
@@ -176,7 +197,7 @@ class FriendsPage extends ConsumerWidget {
                                             );
 
                                         navigator.pop();
-                                        ref
+                                        bottomRef
                                             .read(
                                               pttUiEventProvider.notifier,
                                             )
@@ -193,12 +214,27 @@ class FriendsPage extends ConsumerWidget {
                             },
                           );
                         },
-                      ),
+                      );
+                    },
+                  ),
                   onTap: () {
                     ref
                         .read(currentPttFriendIdProvider.notifier)
                         .state = friend.id;
                     context.push('/chat/${friend.id}');
+                  },
+                  onLongPress: () {
+                    ref
+                        .read(currentPttFriendIdProvider.notifier)
+                        .state = friend.id;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          '"${friend.name}"님이 현재 무전 대상입니다.',
+                        ),
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
                   },
                 );
               },
