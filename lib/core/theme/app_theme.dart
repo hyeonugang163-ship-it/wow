@@ -26,7 +26,7 @@ class AppTheme {
           color: AppColors.textPrimary,
         ),
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: AppColors.surface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
@@ -175,4 +175,3 @@ class AppTheme {
     onTertiaryContainer: AppColors.textPrimary,
   );
 }
-
