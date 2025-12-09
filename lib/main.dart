@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyage/app_env.dart';
 import 'package:voyage/app_router.dart';
 import 'package:voyage/core/app_provider_observer.dart';
+import 'package:voyage/core/theme/app_theme.dart';
 import 'package:voyage/feature_flags.dart';
 import 'package:voyage/ptt_debug_log.dart';
 import 'package:voyage/ptt_lifecycle.dart';
@@ -89,10 +90,9 @@ class _VoyageAppState extends ConsumerState<VoyageApp> {
   Widget build(BuildContext context) {
     return MaterialApp.router(
       title: 'MJTalk',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: ThemeMode.dark,
       routerConfig: ref.watch(appRouterProvider),
     );
   }

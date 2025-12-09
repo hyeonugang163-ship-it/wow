@@ -6,6 +6,7 @@ import 'package:voyage/chat_message.dart';
 import 'package:voyage/chat_state.dart';
 import 'package:voyage/chat_voice_player.dart';
 import 'package:voyage/conversation_state.dart';
+import 'package:voyage/core/theme/app_colors.dart';
 import 'package:voyage/feature_flags.dart';
 import 'package:voyage/friend_state.dart';
 import 'package:voyage/ptt/ptt_mode_provider.dart';
@@ -94,22 +95,21 @@ class ChatPage extends ConsumerWidget {
     );
 
     return Scaffold(
+      backgroundColor: AppColors.chatBackground,
       appBar: AppBar(
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               effectiveFriendName,
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium,
+              style:
+                  Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 2),
             Text(
               modeSubtitle,
-              style: Theme.of(context)
-                  .textTheme
-                  .labelSmall,
+              style:
+                  Theme.of(context).textTheme.labelSmall,
             ),
           ],
         ),
@@ -119,25 +119,32 @@ class ChatPage extends ConsumerWidget {
           Expanded(
             child: ListView.builder(
               reverse: true,
-              padding:
-                  const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+              padding: const EdgeInsets.symmetric(
+                vertical: 8,
+                horizontal: 12,
+              ),
               itemCount: messages.length,
               itemBuilder: (context, index) {
                 final message = messages[index];
                 final isMe = message.fromMe;
-                final alignment =
-                    isMe ? Alignment.centerRight : Alignment.centerLeft;
+                final alignment = isMe
+                    ? Alignment.centerRight
+                    : Alignment.centerLeft;
                 final baseColor =
-                    Theme.of(context).colorScheme.secondaryContainer;
+                    AppColors.chatBubbleOther;
 
                 if (message.type == ChatMessageType.voice) {
-                  final hasAudioPath = message.audioPath != null &&
-                      message.audioPath!.isNotEmpty;
+                  final hasAudioPath =
+                      message.audioPath != null &&
+                          message.audioPath!.isNotEmpty;
                   final isPlaying =
-                      message.id == currentPlayingMessageId;
+                      message.id ==
+                          currentPlayingMessageId;
                   final hasPlaybackError =
-                      errorMessageIds.contains(message.id);
-                  final isError = hasPlaybackError || !hasAudioPath;
+                      errorMessageIds
+                          .contains(message.id);
+                  final isError =
+                      hasPlaybackError || !hasAudioPath;
 
                   String primaryLabel;
                   if (isError) {
@@ -156,11 +163,12 @@ class ChatPage extends ConsumerWidget {
                         '$minutes:${seconds.toString().padLeft(2, '0')}';
                   }
 
-                  final colorScheme = Theme.of(context).colorScheme;
+                  final colorScheme =
+                      Theme.of(context).colorScheme;
                   final bubbleColor = isError
                       ? colorScheme.errorContainer
-                      : isPlaying
-                          ? colorScheme.primaryContainer
+                      : isMe
+                          ? AppColors.chatBubbleMe
                           : baseColor;
 
                   IconData iconData;
@@ -170,10 +178,10 @@ class ChatPage extends ConsumerWidget {
                     iconColor = colorScheme.error;
                   } else if (isPlaying) {
                     iconData = Icons.pause;
-                    iconColor = colorScheme.onPrimaryContainer;
+                    iconColor = colorScheme.onPrimary;
                   } else {
                     iconData = Icons.play_arrow;
-                    iconColor = colorScheme.onSecondaryContainer;
+                    iconColor = colorScheme.onPrimary;
                   }
 
                   return Align(
@@ -220,7 +228,8 @@ class ChatPage extends ConsumerWidget {
                         ),
                         decoration: BoxDecoration(
                           color: bubbleColor,
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius:
+                              BorderRadius.circular(20),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -247,6 +256,9 @@ class ChatPage extends ConsumerWidget {
                     ),
                   );
                 } else {
+                  final textColor =
+                      AppColors.textPrimary;
+
                   return Align(
                     alignment: alignment,
                     child: Container(
@@ -259,10 +271,21 @@ class ChatPage extends ConsumerWidget {
                         horizontal: 12,
                       ),
                       decoration: BoxDecoration(
-                        color: baseColor,
-                        borderRadius: BorderRadius.circular(12),
+                        color: isMe
+                            ? AppColors.chatBubbleMe
+                            : baseColor,
+                        borderRadius:
+                            BorderRadius.circular(20),
                       ),
-                      child: Text(message.text ?? ''),
+                      child: Text(
+                        message.text ?? '',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(
+                              color: textColor,
+                            ),
+                      ),
                     ),
                   );
                 }
@@ -272,8 +295,10 @@ class ChatPage extends ConsumerWidget {
           const Divider(height: 1),
           SafeArea(
             child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 4,
+              ),
               child: Row(
                 children: [
                   Expanded(
@@ -281,7 +306,6 @@ class ChatPage extends ConsumerWidget {
                       controller: controller,
                       decoration: const InputDecoration(
                         hintText: '메시지를 입력하세요',
-                        border: InputBorder.none,
                       ),
                     ),
                   ),

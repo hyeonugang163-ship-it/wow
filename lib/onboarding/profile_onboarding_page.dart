@@ -82,17 +82,19 @@ class _ProfileOnboardingPageState
                     crossAxisAlignment:
                         CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'MJTalk에 오신 것을 환영합니다',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleLarge,
                       ),
                       const SizedBox(height: 8),
-                      const Text(
+                      Text(
                         '친구랑 즉시 말 걸 수 있는 무전 메신저입니다.\n'
                         '먼저 닉네임과 아바타를 정해 주세요.',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium,
                       ),
                       const SizedBox(height: 24),
                       TextField(
@@ -101,16 +103,15 @@ class _ProfileOnboardingPageState
                         decoration: const InputDecoration(
                           labelText: '닉네임',
                           hintText: '예: MJ, 라디오맨',
-                          border: OutlineInputBorder(),
                         ),
                         onChanged: (_) => setState(() {}),
                       ),
                       const SizedBox(height: 16),
-                      const Text(
+                      Text(
                         '아바타 이모지 선택',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium,
                       ),
                       const SizedBox(height: 8),
                       Wrap(

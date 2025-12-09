@@ -9,17 +9,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import 'package:voyage/chat_page.dart';
 import 'package:voyage/auth/auth_state.dart';
 import 'package:voyage/auth/auth_state_notifier.dart';
+import 'package:voyage/chat_page.dart';
+import 'package:voyage/core/theme/app_colors.dart';
 import 'package:voyage/feature_flags.dart';
 import 'package:voyage/friend_state.dart';
 import 'package:voyage/ptt_controller.dart';
 import 'package:voyage/ptt_debug_overlay.dart';
 import 'package:voyage/ptt_strings.dart';
+import 'package:voyage/ptt/ptt_mode_provider.dart';
 import 'package:voyage/ptt/ptt_user_prefs.dart';
 import 'package:voyage/ptt_ui_event.dart';
-import 'package:voyage/ptt/ptt_mode_provider.dart';
 
 /// Minimum hold duration before PTT actually starts.
 ///
@@ -245,46 +246,39 @@ class _PttHomePageState extends ConsumerState<PttHomePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('MJTalk PTT (MVP)'),
+        title: const Text('채팅'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.chat_bubble_outline),
+            tooltip: '채팅',
+            onPressed: () {
+              context.push('/chats');
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.people_alt_outlined),
+            tooltip: '친구',
+            onPressed: () {
+              context.push('/friends');
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: '설정',
+            onPressed: () {
+              context.push('/settings');
+            },
+          ),
           if (kDebugMode)
             IconButton(
-              icon: const Icon(Icons.bug_report),
+              icon: const Icon(Icons.bug_report_outlined),
+              tooltip: '디버그',
               onPressed: () {
                 setState(() {
                   _showDebugOverlay = !_showDebugOverlay;
                 });
               },
             ),
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              switch (value) {
-                case 'chats':
-                  context.push('/chats');
-                  break;
-                case 'friends':
-                  context.push('/friends');
-                  break;
-                case 'settings':
-                  context.push('/settings');
-                  break;
-              }
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(
-                value: 'chats',
-                child: Text('Chats'),
-              ),
-              PopupMenuItem(
-                value: 'friends',
-                child: Text('Friends'),
-              ),
-              PopupMenuItem(
-                value: 'settings',
-                child: Text('Settings'),
-              ),
-            ],
-          ),
         ],
       ),
       body: Stack(
@@ -293,102 +287,127 @@ class _PttHomePageState extends ConsumerState<PttHomePage> {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text('모드'),
-                    const SizedBox(width: 12),
-                    ChoiceChip(
-                      label: const Text('무전모드'),
-                      selected: mode == PttMode.walkie,
-                      onSelected: (_) {
-                        ref
-                            .read(
-                              pttModeProvider.notifier,
-                            )
-                            .setMode(PttMode.walkie);
-                      },
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
                     ),
-                    const SizedBox(width: 8),
-                    ChoiceChip(
-                      label: const Text('매너모드'),
-                      selected: mode == PttMode.manner,
-                      onSelected: (_) {
-                        ref
-                            .read(
-                              pttModeProvider.notifier,
-                            )
-                            .setMode(PttMode.manner);
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.center,
-              child: InkWell(
-                onTap: currentFriend == null
-                    ? null
-                    : () {
-                        final friend = currentFriend;
-                        final args = PttChatRouteArgs(
-                          friendId: friend.id,
-                          friendName: friend.name,
-                          // 현재 단계에서는 로컬 무전 허용/차단 상태를
-                          // 기반으로 상호 무전 허용 여부를 추정한다.
-                          isWalkieAllowed: isWalkieAllowed,
-                        );
-                        context.pushNamed(
-                          'chat',
-                          pathParameters: <String, String>{
-                            'id': friend.id,
-                          },
-                          extra: args,
-                        );
-                      },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 4,
-                    horizontal: 8,
-                  ),
-                  child: Text(
-                    targetStatusText,
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ),
-              ),
-            ),
-            if (currentFriend != null) ...[
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text('무전 허용'),
-                  const SizedBox(width: 8),
-                  Switch(
-                    value: isWalkieAllowed,
-                    onChanged: (value) async {
-                      if (friendBlocked) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              '"${currentFriend.name}"은(는) 차단되어 있어 '
-                              '무전 허용을 변경할 수 없습니다.',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'PTT 모드',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            ChoiceChip(
+                              label: const Text('무전모드'),
+                              selected: mode == PttMode.walkie,
+                              onSelected: (_) {
+                                ref
+                                    .read(
+                                      pttModeProvider.notifier,
+                                    )
+                                    .setMode(PttMode.walkie);
+                              },
                             ),
-                            duration: const Duration(seconds: 2),
+                            const SizedBox(width: 8),
+                            ChoiceChip(
+                              label: const Text('매너모드'),
+                              selected: mode == PttMode.manner,
+                              onSelected: (_) {
+                                ref
+                                    .read(
+                                      pttModeProvider.notifier,
+                                    )
+                                    .setMode(PttMode.manner);
+                              },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        InkWell(
+                          onTap: currentFriend == null
+                              ? null
+                              : () {
+                                  final friend = currentFriend;
+                                  final args = PttChatRouteArgs(
+                                    friendId: friend.id,
+                                    friendName: friend.name,
+                                    isWalkieAllowed: isWalkieAllowed,
+                                  );
+                                  context.pushNamed(
+                                    'chat',
+                                    pathParameters: <String, String>{
+                                      'id': friend.id,
+                                    },
+                                    extra: args,
+                                  );
+                                },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 4,
+                            ),
+                            child: Text(
+                              targetStatusText,
+                              textAlign: TextAlign.start,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium,
+                            ),
                           ),
-                        );
-                        return;
-                      }
-                      await ref
-                          .read(friendPttAllowProvider.notifier)
-                          .setAllowed(currentFriend.id, value);
-                    },
+                        ),
+                        if (currentFriend != null) ...[
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Text(
+                                '무전 허용',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium,
+                              ),
+                              const SizedBox(width: 8),
+                              Switch(
+                                value: isWalkieAllowed,
+                                onChanged: (value) async {
+                                  if (friendBlocked) {
+                                    ScaffoldMessenger.of(context)
+                                        .showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          '"${currentFriend.name}"은(는) 차단되어 있어 '
+                                          '무전 허용을 변경할 수 없습니다.',
+                                        ),
+                                        duration: const Duration(
+                                          seconds: 2,
+                                        ),
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  await ref
+                                      .read(
+                                        friendPttAllowProvider.notifier,
+                                      )
+                                      .setAllowed(
+                                        currentFriend.id,
+                                        value,
+                                      );
+                                },
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
-                ],
-              ),
-            ],
+                ),
                 const SizedBox(height: 24),
                 Expanded(
                   child: Center(
@@ -405,10 +424,10 @@ class _PttHomePageState extends ConsumerState<PttHomePage> {
                                   .colorScheme
                                   .errorContainer
                               : (isTalking || _isPressed)
-                                  ? Theme.of(context).colorScheme.primary
-                                  : Theme.of(context)
+                                  ? Theme.of(context)
                                       .colorScheme
-                                      .primaryContainer,
+                                      .primary
+                                  : AppColors.primarySoft,
                           shape: BoxShape.circle,
                         ),
                         alignment: Alignment.center,
@@ -424,9 +443,7 @@ class _PttHomePageState extends ConsumerState<PttHomePage> {
                               .textTheme
                               .titleMedium
                               ?.copyWith(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onPrimaryContainer,
+                                color: AppColors.textPrimary,
                               ),
                         ),
                       ),

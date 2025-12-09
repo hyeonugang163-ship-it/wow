@@ -9,6 +9,7 @@ import 'package:voyage/chat_list_page.dart';
 import 'package:voyage/chat_page.dart';
 import 'package:voyage/debug/debug_logs_page.dart';
 import 'package:voyage/friends_page.dart';
+import 'package:voyage/home_tabs_page.dart';
 import 'package:voyage/onboarding/profile_onboarding_page.dart';
 import 'package:voyage/ptt_home_page.dart';
 import 'package:voyage/pre_alpha_info_page.dart';
@@ -55,7 +56,7 @@ final appRouterProvider = Provider<GoRouter>(
         GoRoute(
           path: '/',
           name: 'home',
-          builder: (context, state) => const PttHomePage(),
+          builder: (context, state) => const HomeTabsPage(),
         ),
         GoRoute(
           path: '/friends',
@@ -87,6 +88,11 @@ final appRouterProvider = Provider<GoRouter>(
           path: '/settings',
           name: 'settings',
           builder: (context, state) => const SettingsPage(),
+        ),
+        GoRoute(
+          path: '/ptt',
+          name: 'ptt_home',
+          builder: (context, state) => const PttHomePage(),
         ),
         GoRoute(
           path: '/pre-alpha-info',

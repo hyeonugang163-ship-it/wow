@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voyage/abuse.dart';
+import 'package:voyage/core/theme/app_colors.dart';
 import 'package:voyage/friend_state.dart';
 import 'package:voyage/ptt_ui_event.dart';
 
@@ -17,21 +18,53 @@ class FriendsPage extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Friends'),
+        title: const Text('친구'),
       ),
       body: friends.isEmpty
           ? const Center(
               child: Text('아직 친구가 없습니다'),
             )
           : ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 8),
               itemCount: friends.length,
               itemBuilder: (context, index) {
                 final friend = friends[index];
+                final name = friend.name;
+                final initial =
+                    name.isNotEmpty ? name.characters.first : '?';
 
                 return ListTile(
-                  title: Text(friend.name),
-                  subtitle:
-                      friend.status != null ? Text(friend.status!) : null,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
+                  leading: CircleAvatar(
+                    radius: 20,
+                    backgroundColor: AppColors.primarySoft,
+                    child: Text(
+                      initial,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(
+                            color: AppColors.textPrimary,
+                          ),
+                    ),
+                  ),
+                  title: Text(
+                    friend.name,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyLarge,
+                  ),
+                  subtitle: friend.status != null
+                      ? Text(
+                          friend.status!,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall,
+                        )
+                      : null,
                   trailing: IconButton(
                     icon: const Icon(Icons.more_vert),
                     tooltip: '친구 설정',

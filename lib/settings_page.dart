@@ -20,7 +20,7 @@ class SettingsPage extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Settings'),
+        title: const Text('설정'),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -31,28 +31,34 @@ class SettingsPage extends ConsumerWidget {
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+                  children: [
                     Text(
                       'PTT 모드 설명',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium,
                     ),
-                    SizedBox(height: 12),
+                    const SizedBox(height: 12),
                     Text(
                       '무전모드 (Walkie)\n'
                       '• 서로 친구이고, 서로 "무전 허용"에 동의한 유저끼리만 사용 가능합니다.\n'
                       '• 폰이 진동/무음이어도 (OS가 허용하는 범위에서) 바로 목소리가 재생되는 무전기 느낌의 모드입니다.\n'
                       '• 상호동의 + 화이트리스트 기반의 "특권 모드"로 설계되어 있습니다.',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall,
                     ),
-                    SizedBox(height: 12),
+                    const SizedBox(height: 12),
                     Text(
                       '매너모드 (Manner)\n'
                       '• 즉시 재생 대신 녹음본(음성 메시지)으로만 수신하는 안전한 모드입니다.\n'
                       '• 나중에 "시간대" / "앞으로 N시간" 설정으로 자동 매너모드 유지 기능을 제공할 예정입니다.\n'
                       '• 기본값은 매너모드로 시작하는 것을 권장합니다.',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall,
                     ),
                   ],
                 ),
