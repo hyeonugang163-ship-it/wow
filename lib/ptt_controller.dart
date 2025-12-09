@@ -4,13 +4,19 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyage/android_ptt_service.dart' as android_ptt;
+import 'package:voyage/backend/backend_providers.dart';
 import 'package:voyage/chat_state.dart';
 import 'package:voyage/conversation_state.dart';
 import 'package:voyage/feature_flags.dart';
 import 'package:voyage/friend_state.dart';
+import 'package:voyage/ptt_debug_log.dart';
 import 'package:voyage/ptt_local_audio.dart';
 import 'package:voyage/chat_voice_player.dart';
+import 'package:voyage/ptt_metrics.dart';
+import 'package:voyage/ptt_session_config.dart';
+import 'package:voyage/ptt_ui_event.dart';
 import 'package:voyage/voice_transport.dart';
+import 'package:voyage/voice_transport_factory.dart';
 
 enum PttTalkState {
   idle,
@@ -39,27 +45,21 @@ class PttSessionContext {
 /// 권한 확인, 전송 모드, 전송 구현은 이 컨트롤러가 담당한다.
 class PttController {
   PttController({
-    VoiceTransport? transport,
+    required VoiceTransport transport,
     PttMode initialMode = PttMode.manner,
     PttLocalAudioEngine? localAudio,
-  })  : _transport = transport ?? _NoopVoiceTransport(),
-        _mode = initialMode,
+  })  : _transport = transport,
+        mode = initialMode,
         _localAudio = localAudio ?? PttLocalAudioEngine();
 
   final VoiceTransport _transport;
   final PttLocalAudioEngine _localAudio;
   bool _localAudioInitialized = false;
-  PttMode _mode;
+  PttMode mode;
   bool _isPublishing = false;
   PttSessionContext? _lastContext;
 
-  PttMode get mode => _mode;
-
-  set mode(PttMode value) {
-    _mode = value;
-  }
-
-  bool get isWalkie => _mode == PttMode.walkie;
+  bool get isWalkie => mode == PttMode.walkie;
 
   PttSessionContext? get lastContext => _lastContext;
 
@@ -75,7 +75,7 @@ class PttController {
     String? targetFriendId,
     String? targetFriendName,
   }) async {
-    _mode = mode;
+    this.mode = mode;
     final modeLabel = mode == PttMode.walkie ? 'walkie' : 'manner';
     final targetIdLabel = targetFriendId ?? '(none)';
     final targetNameLabel = targetFriendName ?? '(none)';
@@ -85,14 +85,14 @@ class PttController {
       targetFriendId: targetFriendId,
       targetFriendName: targetFriendName,
     );
-
-    // NOTE: 운영 환경에서는 사용자 이름 대신 id 위주의 메타데이터만
-    // 로그로 남기는 것이 바람직하다.
-    print(
-      '[PTT] startTalk called. '
-      'mode=$modeLabel '
-      'target_friend_id=$targetIdLabel '
-      'target_friend_name=$targetNameLabel',
+    PttLogger.log(
+      '[PTT] startTalk',
+      'startTalk called',
+      meta: <String, Object?>{
+        'mode': modeLabel,
+        'targetFriendId': targetIdLabel,
+        'targetFriendName': targetNameLabel,
+      },
     );
 
     // 매너/무전 모드 모두에서 녹음을 시작해 두고,
@@ -127,12 +127,14 @@ class PttController {
         ctx?.mode == PttMode.walkie ? 'walkie' : 'manner';
     final targetIdLabel = ctx?.targetFriendId ?? '(none)';
     final targetNameLabel = ctx?.targetFriendName ?? '(none)';
-
-    print(
-      '[PTT] stopTalk called. '
-      'mode=$modeLabel '
-      'target_friend_id=$targetIdLabel '
-      'target_friend_name=$targetNameLabel',
+    PttLogger.log(
+      '[PTT] stopTalk',
+      'stopTalk called',
+      meta: <String, Object?>{
+        'mode': modeLabel,
+        'targetFriendId': targetIdLabel,
+        'targetFriendName': targetNameLabel,
+      },
     );
 
     String? recordedPath;
@@ -147,10 +149,14 @@ class PttController {
     final hasRecordedPath =
         recordedPath != null && recordedPath.isNotEmpty;
     final modeName = mode == PttMode.walkie ? 'walkie' : 'manner';
-    print(
-      '[PTT][stopTalk] mode=$modeName '
-      'hasPath=$hasRecordedPath '
-      'target_friend_id=$targetIdLabel',
+    PttLogger.log(
+      '[PTT][stopTalk]',
+      'stopTalk finished',
+      meta: <String, Object?>{
+        'mode': modeName,
+        'hasPath': hasRecordedPath,
+        'targetFriendId': targetIdLabel,
+      },
     );
 
     // 즉시 재생은 walkie 모드에서만 수행
@@ -178,50 +184,25 @@ class PttController {
   }
 }
 
-/// 아직 전송 엔진이 준비되지 않은 상태에서
-/// 앱을 컴파일/실행할 수 있도록 하는 No-op 구현.
-class _NoopVoiceTransport implements VoiceTransport {
-  @override
-  Future<void> connect({required String url, required String token}) async {
-    print('[PTT][NoopVoiceTransport] connect() called');
-  }
-
-  @override
-  Future<void> coolDown() async {
-    print('[PTT][NoopVoiceTransport] coolDown() called');
-  }
-
-  @override
-  Future<void> disconnect() async {
-    print('[PTT][NoopVoiceTransport] disconnect() called');
-  }
-
-  @override
-  Stream<List<int>> get incomingOpus => const Stream.empty();
-
-  @override
-  Future<void> startPublishing(Stream<List<int>> opus) async {
-    print('[PTT][NoopVoiceTransport] startPublishing() called');
-  }
-
-  @override
-  Future<void> stopPublishing() async {
-    print('[PTT][NoopVoiceTransport] stopPublishing() called');
-  }
-
-  @override
-  Future<void> warmUp() async {
-    print('[PTT][NoopVoiceTransport] warmUp() called');
-  }
-}
-
   final pttControllerProvider =
       StateNotifierProvider<PttControllerNotifier, PttTalkState>(
   (ref) {
     final localAudio = ref.read(pttLocalAudioEngineProvider);
+    // TODO: 실제 사용자 ID를 가져오는 상태가 생기면 대체한다.
+    const localUserId = 'me';
     return PttControllerNotifier(
       ref,
-      PttController(localAudio: localAudio),
+      PttController(
+        transport: VoiceTransportFactory.create(
+          policy: FF.policy,
+          sessionConfig: PttSessionConfig.placeholder(
+            localUserId: localUserId,
+            remoteUserId: 'peer',
+            mode: PttMode.manner,
+          ),
+        ),
+        localAudio: localAudio,
+      ),
     );
   },
 );
@@ -234,7 +215,7 @@ class _NoopVoiceTransport implements VoiceTransport {
 /// 3) PTT 버튼을 길게 눌러 몇 초간 말한 뒤 손을 뗀다.
 /// 4) 기대 동작:
 ///    - PttLocalAudioEngine이 앱 내부 temp/ptt 디렉토리에
-///      ptt_<timestamp>.m4a 파일을 생성한다.
+///      `ptt_<timestamp>.m4a` 파일을 생성한다.
 ///    - PttController.stopTalk()가 해당 파일 경로를 반환한다
 ///      (Walkie 모드에서는 null 반환).
 ///    - PttControllerNotifier.stopTalk()가
@@ -273,6 +254,8 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
   /// Whether a PTT session is currently active from the notifier's view.
   bool _isTalking = false;
 
+  bool get isTalking => _isTalking;
+
   /// Last time PTT was started (for global cooldown).
   DateTime? _lastPttStartedAt;
 
@@ -281,11 +264,13 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
   /// Used only for analytics / future policy hooks; 현재 단계에서는
   /// 실제 블록 대신 로그만 남긴다.
   final Map<String, List<DateTime>> _friendPttStarts = {};
+  DateTime? _lastUiHoldAt;
 
-  Future<void> startTalk() async {
+  Future<void> startTalk({DateTime? uiHoldAt}) async {
     if (_isTalking) {
-      print(
-        '[PTT][Guard] startTalk ignored because session already active',
+      PttLogger.log(
+        '[PTT][Guard]',
+        'startTalk ignored because session already active',
       );
       return;
     }
@@ -305,11 +290,30 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
       friendBlocked = blockMap[targetFriendId] ?? false;
     }
 
+    final DateTime startMark = uiHoldAt ?? DateTime.now();
+    _lastUiHoldAt = startMark;
+    _ref.read(pttMetricsProvider.notifier).recordStartRequest(
+          friendId: targetFriendId,
+          mode: requestedMode,
+          at: startMark,
+        );
+
     if (friendBlocked) {
-      print(
-        '[PTT][Policy] startTalk blocked by friendBlock '
-        'friendId=$targetFriendId',
+      PttLogger.log(
+        '[PTT][Policy]',
+        'startTalk blocked by friendBlock',
+        meta: <String, Object?>{
+          'friendId': targetFriendId ?? '(none)',
+        },
       );
+      _ref.read(pttMetricsProvider.notifier).recordError(
+            friendId: targetFriendId,
+            mode: requestedMode,
+            reason: 'blocked',
+          );
+      _ref.read(pttUiEventProvider.notifier).emit(
+            PttUiEvents.friendBlocked(friendId: targetFriendId),
+          );
       return;
     }
 
@@ -320,12 +324,28 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
           now.millisecondsSinceEpoch -
               _lastPttStartedAt!.millisecondsSinceEpoch;
       if (sinceLastMs < minIntervalMs) {
-        print(
-          '[PTT][RateLimit] startTalk blocked by cooldown '
-          'sinceLastMs=$sinceLastMs '
-          'minIntervalMs=$minIntervalMs '
-          'friendId=${targetFriendId ?? '(none)'}',
+        PttLogger.log(
+          '[PTT][RateLimit]',
+          'startTalk blocked by cooldown',
+          meta: <String, Object?>{
+            'sinceLastMs': sinceLastMs,
+            'minIntervalMs': minIntervalMs,
+            'friendId': targetFriendId ?? '(none)',
+          },
         );
+        _ref.read(pttMetricsProvider.notifier).recordError(
+              friendId: targetFriendId,
+              mode: requestedMode,
+              reason: 'cooldown',
+            );
+        _ref.read(pttUiEventProvider.notifier).emit(
+              PttUiEvents.cooldownBlocked(
+                friendId: targetFriendId,
+                sinceLastMs: sinceLastMs,
+                minIntervalMs: minIntervalMs,
+                mode: requestedMode,
+              ),
+            );
         return;
       }
     }
@@ -344,10 +364,22 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
       _friendPttStarts[targetFriendId] = recent;
 
       if (recent.length > softLimit) {
-        print(
-          '[PTT][RateLimit] friend burst friendId=$targetFriendId '
-          'count=${recent.length} windowSeconds=$windowSeconds',
+        PttLogger.log(
+          '[PTT][RateLimit]',
+          'friend burst',
+          meta: <String, Object?>{
+            'friendId': targetFriendId,
+            'count': recent.length,
+            'windowSeconds': windowSeconds,
+          },
         );
+        _ref.read(pttUiEventProvider.notifier).emit(
+              PttUiEvents.rateLimitSoft(
+                friendId: targetFriendId,
+                count: recent.length,
+                windowSeconds: windowSeconds,
+              ),
+            );
         // TODO: hard block or soft warn on too many PTT in short time.
       }
     }
@@ -355,6 +387,13 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
     var effectiveMode = requestedMode;
     if (requestedMode == PttMode.walkie && !friendAllowed) {
       effectiveMode = PttMode.manner;
+      if (targetFriendId != null) {
+        _ref.read(pttUiEventProvider.notifier).emit(
+              PttUiEvents.friendNotAllowWalkie(
+                friendId: targetFriendId,
+              ),
+            );
+      }
     }
 
     String? targetFriendName;
@@ -372,30 +411,88 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
     final effectiveLabel =
         effectiveMode == PttMode.walkie ? 'walkie' : 'manner';
 
-    print(
-      '[PTT] notifier.startTalk: '
-      'requestedMode=$requestedLabel '
-      'friendAllowed=$friendAllowed '
-      'cooldownOk=true '
-      'effectiveMode=$effectiveLabel '
-      'target_friend_id=${targetFriendId ?? '(none)'}',
+    PttLogger.log(
+      '[PTT] notifier.startTalk',
+      'startTalk accepted',
+      meta: <String, Object?>{
+        'requestedMode': requestedLabel,
+        'effectiveMode': effectiveLabel,
+        'friendAllowed': friendAllowed,
+        'targetFriendId': targetFriendId ?? '(none)',
+      },
     );
 
-    await _controller.startTalk(
-      mode: effectiveMode,
-      targetFriendId: targetFriendId,
-      targetFriendName: targetFriendName,
-    );
-    _lastPttStartedAt = now;
-    _isTalking = true;
-    state = PttTalkState.talking;
+    try {
+      await _controller.startTalk(
+        mode: effectiveMode,
+        targetFriendId: targetFriendId,
+        targetFriendName: targetFriendName,
+      );
+      final DateTime end = DateTime.now();
+      final DateTime origin = _lastUiHoldAt ?? now;
+      final int ttpMillis =
+          end.millisecondsSinceEpoch - origin.millisecondsSinceEpoch;
+      _ref.read(pttMetricsProvider.notifier).recordSuccess(
+            friendId: targetFriendId,
+            mode: effectiveMode,
+            ttpMillis: ttpMillis,
+          );
+      PttLogger.log(
+        '[PTT][TTP]',
+        'success',
+        meta: <String, Object?>{
+          'mode': effectiveLabel,
+          'friendId': targetFriendId ?? '(none)',
+          'ttpMs': ttpMillis,
+        },
+      );
+      _lastPttStartedAt = now;
+      _isTalking = true;
+      state = PttTalkState.talking;
+    } catch (e) {
+      _ref.read(pttMetricsProvider.notifier).recordError(
+            friendId: targetFriendId,
+            mode: effectiveMode,
+            reason: 'start_error',
+          );
+      PttLogger.log(
+        '[PTT][TTP]',
+        'error on startTalk',
+        meta: <String, Object?>{
+          'mode': effectiveLabel,
+          'friendId': targetFriendId ?? '(none)',
+          'error': e.toString(),
+        },
+      );
+    }
   }
 
-  Future<void> stopTalk() async {
-    final path = await _controller.stopTalk();
-    _isTalking = false;
-    state = PttTalkState.idle;
-    print('[PTT][Guard] stopTalk finished, isTalking=false');
+  Future<void> stopTalk({String reason = 'manual'}) async {
+    String? path;
+    try {
+      path = await _controller.stopTalk();
+    } catch (e) {
+      PttLogger.log(
+        '[PTT][Guard]',
+        'stopTalk error',
+        meta: <String, Object?>{
+          'reason': reason,
+          'error': e.toString(),
+        },
+      );
+    } finally {
+      if (_isTalking) {
+        _isTalking = false;
+        state = PttTalkState.idle;
+        PttLogger.log(
+          '[PTT][State]',
+          'isTalking -> false',
+          meta: <String, Object?>{
+            'reason': reason,
+          },
+        );
+      }
+    }
 
     final ctx = _controller.lastContext;
     final mode = ctx?.mode;
@@ -403,11 +500,15 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
 
     final modeName = mode?.name ?? 'null';
     final hasPath = path != null && path.isNotEmpty;
-    print(
-      '[PTT][notifier.stopTalk] '
-      'ctxMode=$modeName '
-      'target_friend_id=${targetFriendId ?? '(none)'} '
-      'hasPath=$hasPath',
+    PttLogger.log(
+      '[PTT][notifier.stopTalk]',
+      'stopTalk',
+      meta: <String, Object?>{
+        'mode': modeName,
+        'targetFriendId': targetFriendId ?? '(none)',
+        'hasPath': hasPath,
+        'reason': reason,
+      },
     );
 
     // 매너모드가 아니거나, 대상/녹음 경로가 없으면 아무 것도 하지 않는다.
@@ -425,15 +526,39 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
       }
 
       final pathLen = path.length;
-      print(
-        '[PTT][Manner][addVoice] '
-        'chatId=$targetFriendId pathLen=$pathLen',
+      PttLogger.log(
+        '[PTT][Manner][addVoice]',
+        'add voice message',
+        meta: <String, Object?>{
+          'chatId': targetFriendId,
+          'pathLen': pathLen,
+        },
       );
+
+      final String uploadPath = path;
+      _ref
+          .read(pttMediaRepositoryProvider)
+          .uploadVoice(
+            uploadPath,
+            chatId: targetFriendId,
+            friendId: targetFriendId,
+          )
+          .catchError((Object error, StackTrace stackTrace) {
+        PttLogger.log(
+          '[PTT][Manner][uploadVoice]',
+          'upload failed',
+          meta: <String, Object?>{
+            'targetFriendId': targetFriendId,
+            'error': error.toString(),
+          },
+        );
+        return uploadPath;
+      });
 
       // 매너모드: 방금 녹음한 음성을 음성 메시지(voice)로 채팅에 저장한다.
       _ref.read(chatMessagesProvider.notifier).addVoiceMessage(
             chatId: targetFriendId,
-            audioPath: path,
+            audioPath: uploadPath,
             // TODO: 실제 음성 길이를 계산해서 durationMillis에 채운다.
             durationMillis: null,
             fromMe: true,
@@ -447,11 +572,15 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
           );
     } catch (e) {
       final hasPath = path.isNotEmpty;
-      // 메타데이터 위주 로그 (내용/경로는 남기지 않음).
-      // ignore: avoid_print
-      print(
-        '[PTT] notifier.stopTalk error: '
-        'mode=manner hasPath=$hasPath target_friend_id=$targetFriendId error=$e',
+      PttLogger.log(
+        '[PTT][notifier.stopTalk]',
+        'error while adding voice',
+        meta: <String, Object?>{
+          'mode': 'manner',
+          'hasPath': hasPath,
+          'targetFriendId': targetFriendId,
+          'error': e.toString(),
+        },
       );
     }
   }

@@ -1,28 +1,48 @@
 // NOTE: 설계도 v1.1 기준 ChatMessagesNotifier(텍스트/음성 메시지 + durationMillis 업데이트)를 관리한다.
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:voyage/backend/backend_providers.dart';
+import 'package:voyage/backend/repositories.dart';
 import 'package:voyage/chat_message.dart';
+import 'package:voyage/ptt_debug_log.dart';
 
 class ChatMessagesNotifier extends StateNotifier<List<ChatMessage>> {
-  ChatMessagesNotifier() : super(_initialMessages);
+  ChatMessagesNotifier(this._repository)
+      : _loadedChatIds = <String>{},
+        super(const <ChatMessage>[]);
 
-  // TODO: 실제 서버 연동 시 제거하거나 서버 데이터로 대체.
-  static final List<ChatMessage> _initialMessages = [
-    ChatMessage(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      chatId: 'u1',
-      text: '안녕! 이것은 더미 메시지야.',
-      fromMe: false,
-      createdAt: DateTime.now(),
-    ),
-    ChatMessage(
-      id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
-      chatId: 'u1',
-      text: '테스트 채팅방에 온 걸 환영해.',
-      fromMe: true,
-      createdAt: DateTime.now(),
-    ),
-  ];
+  final ChatRepository _repository;
+  final Set<String> _loadedChatIds;
+
+  Future<void> _loadMessagesIfNeeded(String chatId) async {
+    if (_loadedChatIds.contains(chatId)) {
+      return;
+    }
+    _loadedChatIds.add(chatId);
+    try {
+      final messages = await _repository.loadMessages(chatId);
+      final others =
+          state.where((m) => m.chatId != chatId).toList(growable: false);
+      state = <ChatMessage>[...others, ...messages];
+      PttLogger.log(
+        '[Chat][State]',
+        'messages loaded',
+        meta: <String, Object?>{
+          'chatId': chatId,
+          'count': messages.length,
+        },
+      );
+    } catch (e) {
+      PttLogger.log(
+        '[Chat][State]',
+        'failed to load messages',
+        meta: <String, Object?>{
+          'chatId': chatId,
+          'error': e.toString(),
+        },
+      );
+    }
+  }
 
   void addMessage({
     required String chatId,
@@ -38,6 +58,20 @@ class ChatMessagesNotifier extends StateNotifier<List<ChatMessage>> {
       createdAt: now,
     );
     state = [...state, message];
+
+    _repository
+        .sendText(chatId, text)
+        .catchError((Object error, StackTrace stackTrace) {
+      PttLogger.log(
+        '[Chat][State]',
+        'sendText failed',
+        meta: <String, Object?>{
+          'chatId': chatId,
+          'error': error.toString(),
+        },
+      );
+      return message;
+    });
   }
 
   void addVoiceMessage({
@@ -58,12 +92,30 @@ class ChatMessagesNotifier extends StateNotifier<List<ChatMessage>> {
     state = [...state, message];
 
     final hasPath = audioPath.isNotEmpty;
-    // 운영 단계에서는 로깅 레벨/전달 경로를 조정한다.
-    // ignore: avoid_print
-    print(
-      '[Chat] voice message added '
-      'chatId=$chatId fromMe=$fromMe hasPath=$hasPath',
+    PttLogger.log(
+      '[Chat]',
+      'voice message added',
+      meta: <String, Object?>{
+        'chatId': chatId,
+        'fromMe': fromMe,
+        'hasPath': hasPath,
+      },
     );
+
+    final int safeDurationMillis = durationMillis ?? 0;
+    _repository
+        .sendVoice(chatId, audioPath, safeDurationMillis)
+        .catchError((Object error, StackTrace stackTrace) {
+      PttLogger.log(
+        '[Chat][State]',
+        'sendVoice failed',
+        meta: <String, Object?>{
+          'chatId': chatId,
+          'error': error.toString(),
+        },
+      );
+      return message;
+    });
   }
 
   void updateVoiceMessageDuration({
@@ -90,21 +142,28 @@ class ChatMessagesNotifier extends StateNotifier<List<ChatMessage>> {
     }).toList();
 
     if (updated) {
-      // 메타데이터 위주 로그 (내용/경로는 남기지 않음).
-      // ignore: avoid_print
-      print(
-        '[Chat] voice duration updated '
-        'messageId=$messageId durationMillis=$durationMillis',
+      PttLogger.log(
+        '[Chat]',
+        'voice duration updated',
+        meta: <String, Object?>{
+          'messageId': messageId,
+          'durationMillis': durationMillis,
+        },
       );
     }
   }
 
   List<ChatMessage> messagesForChat(String chatId) {
+    // Fire-and-forget load; UI will rebuild when state updates.
+    _loadMessagesIfNeeded(chatId);
     return state.where((m) => m.chatId == chatId).toList();
   }
 }
 
 final chatMessagesProvider =
     StateNotifierProvider<ChatMessagesNotifier, List<ChatMessage>>(
-  (ref) => ChatMessagesNotifier(),
+  (ref) {
+    final repository = ref.read(chatRepositoryProvider);
+    return ChatMessagesNotifier(repository);
+  },
 );

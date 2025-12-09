@@ -8,6 +8,9 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
@@ -16,10 +19,42 @@ import androidx.core.content.ContextCompat
 
 class PttService : Service() {
 
+    private var audioManager: AudioManager? = null
+    private var audioFocusRequest: AudioFocusRequest? = null
+
+    private val audioFocusChangeListener =
+        AudioManager.OnAudioFocusChangeListener { focusChange ->
+            when (focusChange) {
+                AudioManager.AUDIOFOCUS_LOSS,
+                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                    Log.d(
+                        TAG,
+                        "[PTT][AudioFocus] LOSS focusChange=$focusChange, stopping service",
+                    )
+                    stopSelfSafely("audio_focus_loss")
+                }
+
+                AudioManager.AUDIOFOCUS_GAIN -> {
+                    Log.d(
+                        TAG,
+                        "[PTT][AudioFocus] GAIN",
+                    )
+                }
+
+                else -> {
+                    Log.d(
+                        TAG,
+                        "[PTT][AudioFocus] change=$focusChange",
+                    )
+                }
+            }
+        }
+
     override fun onCreate() {
         super.onCreate()
         isStartingOrRunning = true
         createNotificationChannel()
+        audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
         Log.d(TAG, "[PTT][FGS] onCreate, isRunning=true")
     }
 
@@ -33,26 +68,27 @@ class PttService : Service() {
                 ACTION_START_PTT -> {
                     val notification = buildNotification()
                     startForeground(NOTIFICATION_ID, notification)
+                    requestAudioFocus()
                 }
                 ACTION_STOP_PTT -> {
-                    stopForeground(true)
-                    stopSelf()
-                    isStartingOrRunning = false
+                    stopSelfSafely("action_stop")
                 }
                 else -> {
                     val notification = buildNotification()
                     startForeground(NOTIFICATION_ID, notification)
+                    requestAudioFocus()
                 }
             }
         } catch (e: Exception) {
             Log.e(TAG, "[PTT][FGS] onStartCommand error=$e", e)
-            stopSelf()
+            stopSelfSafely("onStartCommand_error")
         }
 
         return START_STICKY
     }
 
     override fun onDestroy() {
+        abandonAudioFocus()
         isStartingOrRunning = false
         Log.d(TAG, "[PTT][FGS] onDestroy, isRunning=false")
         super.onDestroy()
@@ -79,6 +115,93 @@ class PttService : Service() {
             .setContentText("무전 통신이 활성화된 상태입니다.")
             .setOngoing(true)
             .build()
+    }
+
+    private fun requestAudioFocus() {
+        val manager = audioManager ?: return
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val currentRequest = audioFocusRequest
+                if (currentRequest != null) {
+                    // 이미 요청된 상태.
+                    return
+                }
+                val attributes = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+                val request = AudioFocusRequest.Builder(
+                    AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE,
+                )
+                    .setAudioAttributes(attributes)
+                    .setOnAudioFocusChangeListener(audioFocusChangeListener)
+                    .build()
+                val result = manager.requestAudioFocus(request)
+                if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+                    audioFocusRequest = request
+                    Log.d(TAG, "[PTT][AudioFocus] request granted")
+                } else {
+                    Log.w(
+                        TAG,
+                        "[PTT][AudioFocus] request failed result=$result",
+                    )
+                }
+            } else {
+                val result = manager.requestAudioFocus(
+                    audioFocusChangeListener,
+                    AudioManager.STREAM_VOICE_CALL,
+                    AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE,
+                )
+                if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+                    Log.d(TAG, "[PTT][AudioFocus] request granted (legacy)")
+                } else {
+                    Log.w(
+                        TAG,
+                        "[PTT][AudioFocus] request failed (legacy) result=$result",
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "[PTT][AudioFocus] request error=$e", e)
+        }
+    }
+
+    private fun abandonAudioFocus() {
+        val manager = audioManager ?: return
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val request = audioFocusRequest
+                if (request != null) {
+                    manager.abandonAudioFocusRequest(request)
+                    audioFocusRequest = null
+                    Log.d(TAG, "[PTT][AudioFocus] abandon (request)")
+                }
+            } else {
+                manager.abandonAudioFocus(audioFocusChangeListener)
+                Log.d(TAG, "[PTT][AudioFocus] abandon (legacy)")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "[PTT][AudioFocus] abandon error=$e", e)
+        }
+    }
+
+    private fun stopSelfSafely(reason: String) {
+        Log.d(TAG, "[PTT][FGS] stopSelfSafely reason=$reason")
+        try {
+            try {
+                stopForeground(true)
+            } catch (e: Exception) {
+                Log.e(TAG, "[PTT][FGS] stopForeground error=$e", e)
+            }
+            abandonAudioFocus()
+        } finally {
+            isStartingOrRunning = false
+            try {
+                stopSelf()
+            } catch (e: Exception) {
+                Log.e(TAG, "[PTT][FGS] stopSelf error=$e", e)
+            }
+        }
     }
 
     companion object {

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:voyage/ptt_debug_log.dart';
 
 const MethodChannel _channel = MethodChannel('mjtalk.ptt.service');
 
@@ -12,8 +13,12 @@ Future<void> startPttService() async {
   try {
     await _channel.invokeMethod('startPttService');
   } on PlatformException catch (e) {
-    debugPrint(
-      '[PTT][AndroidPttService] startPttService error: $e',
+    PttLogger.log(
+      '[PTT][AndroidPttService]',
+      'startPttService error',
+      meta: <String, Object?>{
+        'error': e.toString(),
+      },
     );
   }
 }
@@ -24,9 +29,12 @@ Future<void> stopPttService() async {
   try {
     await _channel.invokeMethod('stopPttService');
   } on PlatformException catch (e) {
-    debugPrint(
-      '[PTT][AndroidPttService] stopPttService error: $e',
+    PttLogger.log(
+      '[PTT][AndroidPttService]',
+      'stopPttService error',
+      meta: <String, Object?>{
+        'error': e.toString(),
+      },
     );
   }
 }
-

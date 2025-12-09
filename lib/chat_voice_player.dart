@@ -1,6 +1,6 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyage/chat_state.dart';
+import 'package:voyage/ptt_debug_log.dart';
 import 'package:voyage/ptt_local_audio.dart';
 
 /// Manual test – voice bubble playback UX
@@ -59,9 +59,15 @@ class ChatVoicePlayer {
     String? messageId,
   }) async {
     final hasPath = path.isNotEmpty;
-    debugPrint(
-      '[ChatVoicePlayer] play requested '
-      '(hasPath=$hasPath messageId=$messageId)',
+    final pathLen = path.length;
+    PttLogger.log(
+      '[ChatVoicePlayer]',
+      'play requested',
+      meta: <String, Object?>{
+        'hasPath': hasPath,
+        'pathLen': pathLen,
+        'messageId': messageId ?? '(none)',
+      },
     );
 
     if (!hasPath) {
@@ -86,12 +92,23 @@ class ChatVoicePlayer {
       final oldId = globalNotifier.state;
       if (oldId != messageId) {
         globalNotifier.state = messageId;
-        debugPrint(
-          '[ChatVoicePlayer] global playing id changed old=$oldId new=$messageId',
+        PttLogger.log(
+          '[ChatVoicePlayer]',
+          'global playing id changed',
+          meta: <String, Object?>{
+            'oldId': oldId ?? '(none)',
+            'newId': messageId ?? '(none)',
+          },
         );
       }
-      debugPrint(
-        '[ChatVoicePlayer] play start path=$path messageId=$messageId',
+      PttLogger.log(
+        '[ChatVoicePlayer]',
+        'play start',
+        meta: <String, Object?>{
+          'hasPath': hasPath,
+          'pathLen': pathLen,
+          'messageId': messageId ?? '(none)',
+        },
       );
       final startedAt = DateTime.now();
       await _localAudio.playFromPath(
@@ -116,13 +133,26 @@ class ChatVoicePlayer {
             );
       }
 
-      debugPrint(
-        '[ChatVoicePlayer] play completed path=$path messageId=$messageId',
+      PttLogger.log(
+        '[ChatVoicePlayer]',
+        'play completed',
+        meta: <String, Object?>{
+          'hasPath': hasPath,
+          'pathLen': pathLen,
+          'messageId': messageId ?? '(none)',
+          'durationMillis': effectiveDurationMillis,
+        },
       );
     } catch (e) {
-      debugPrint(
-        '[ChatVoicePlayer] play error path=$path '
-        'messageId=$messageId error=$e',
+      PttLogger.log(
+        '[ChatVoicePlayer]',
+        'play error',
+        meta: <String, Object?>{
+          'hasPath': hasPath,
+          'pathLen': pathLen,
+          'messageId': messageId ?? '(none)',
+          'error': e.toString(),
+        },
       );
       if (messageId != null) {
         final errorNotifier =
@@ -138,8 +168,13 @@ class ChatVoicePlayer {
         final oldId = globalNotifier.state;
         if (oldId != null) {
           globalNotifier.state = null;
-          debugPrint(
-            '[ChatVoicePlayer] global playing id changed old=$oldId new=null',
+          PttLogger.log(
+            '[ChatVoicePlayer]',
+            'global playing id changed',
+            meta: <String, Object?>{
+              'oldId': oldId,
+              'newId': '(none)',
+            },
           );
         }
       }
@@ -152,6 +187,7 @@ class ChatVoicePlayer {
   }) async {
     final currentId = _ref.read(currentPlayingVoiceMessageIdProvider);
     final hasPath = path.isNotEmpty;
+    final pathLen = path.length;
 
     final stateBefore = !hasPath
         ? VoicePlayState.error
@@ -160,9 +196,15 @@ class ChatVoicePlayer {
             : VoicePlayState.idle);
     final isPlayingBefore = stateBefore == VoicePlayState.playing;
 
-    debugPrint(
-      '[ChatVoicePlayer] tap messageId=$messageId '
-      'isPlayingBefore=$isPlayingBefore path=$path',
+    PttLogger.log(
+      '[ChatVoicePlayer]',
+      'tap',
+      meta: <String, Object?>{
+        'messageId': messageId,
+        'isPlayingBefore': isPlayingBefore,
+        'hasPath': hasPath,
+        'pathLen': pathLen,
+      },
     );
 
     if (!hasPath) {
@@ -173,12 +215,21 @@ class ChatVoicePlayer {
     if (currentId == messageId) {
       try {
         await _localAudio.stopPlayback();
-        debugPrint(
-          '[ChatVoicePlayer] stop requested messageId=$messageId',
+        PttLogger.log(
+          '[ChatVoicePlayer]',
+          'stop requested',
+          meta: <String, Object?>{
+            'messageId': messageId,
+          },
         );
       } catch (e) {
-        debugPrint(
-          '[ChatVoicePlayer] stop error messageId=$messageId error=$e',
+        PttLogger.log(
+          '[ChatVoicePlayer]',
+          'stop error',
+          meta: <String, Object?>{
+            'messageId': messageId,
+            'error': e.toString(),
+          },
         );
       } finally {
         final globalNotifier =
@@ -186,8 +237,13 @@ class ChatVoicePlayer {
         final oldId = globalNotifier.state;
         if (oldId != null) {
           globalNotifier.state = null;
-          debugPrint(
-            '[ChatVoicePlayer] global playing id changed old=$oldId new=null',
+          PttLogger.log(
+            '[ChatVoicePlayer]',
+            'global playing id changed',
+            meta: <String, Object?>{
+              'oldId': oldId,
+              'newId': '(none)',
+            },
           );
         }
       }

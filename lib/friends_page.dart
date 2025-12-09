@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voyage/abuse.dart';
 import 'package:voyage/friend_state.dart';
+import 'package:voyage/ptt_ui_event.dart';
 
 class FriendsPage extends ConsumerWidget {
   const FriendsPage({super.key});
@@ -39,7 +40,7 @@ class FriendsPage extends ConsumerWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Switch(
-                        value: isBlocked ? false : isAllowed,
+                        value: isAllowed,
                         onChanged: (value) {
                           if (isBlocked) {
                             // Blocked friends cannot be toggled for PTT allow.
@@ -64,6 +65,40 @@ class FriendsPage extends ConsumerWidget {
                                     : '"${friend.name}"에 대한 무전 허용을 해제했습니다.',
                               ),
                               duration: const Duration(seconds: 2),
+                            ),
+                          );
+                        },
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          isBlocked ? Icons.block : Icons.block_outlined,
+                          color:
+                              isBlocked ? Colors.redAccent : null,
+                        ),
+                        tooltip:
+                            isBlocked ? '차단 해제' : '차단',
+                        onPressed: () {
+                          final next = !isBlocked;
+                          ref
+                              .read(friendBlockProvider.notifier)
+                              .setBlocked(friend.id, next);
+                          if (next) {
+                            // 차단 시에는 무전 허용도 함께 해제.
+                            ref
+                                .read(
+                                  friendPttAllowProvider.notifier,
+                                )
+                                .setAllowed(friend.id, false);
+                          }
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                next
+                                    ? '"${friend.name}"님을 차단했습니다.'
+                                    : '"${friend.name}"님 차단을 해제했습니다.',
+                              ),
+                              duration:
+                                  const Duration(seconds: 2),
                             ),
                           );
                         },
@@ -108,17 +143,19 @@ class FriendsPage extends ConsumerWidget {
                                     const SizedBox(height: 16),
                                     SwitchListTile(
                                       title: const Text('무전 허용'),
-                                      value: localBlocked
-                                          ? false
-                                          : localPttAllow,
+                                      value: localPttAllow,
                                       onChanged: localBlocked
                                           ? null
                                           : (value) {
                                               ref
-                                                  .read(friendPttAllowProvider
-                                                      .notifier)
+                                                  .read(
+                                                    friendPttAllowProvider
+                                                        .notifier,
+                                                  )
                                                   .setAllowed(
-                                                      friend.id, value);
+                                                    friend.id,
+                                                    value,
+                                                  );
                                             },
                                     ),
                                     SwitchListTile(
@@ -149,6 +186,8 @@ class FriendsPage extends ConsumerWidget {
                                       ),
                                       title: const Text('신고하기'),
                                       onTap: () async {
+                                        final navigator =
+                                            Navigator.of(context);
                                         final reason =
                                             await showDialog<AbuseReason>(
                                           context: context,
@@ -207,17 +246,16 @@ class FriendsPage extends ConsumerWidget {
                                               reason: reason,
                                             );
 
-                                        Navigator.of(context).pop();
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              '"${friend.name}"님을 신고했습니다.',
-                                            ),
-                                            duration:
-                                                const Duration(seconds: 2),
-                                          ),
-                                        );
+                                        navigator.pop();
+                                        ref
+                                            .read(
+                                              pttUiEventProvider.notifier,
+                                            )
+                                            .emit(
+                                              PttUiEvents.abuseReported(
+                                                friendId: friend.id,
+                                              ),
+                                            );
                                       },
                                     ),
                                   ],
@@ -238,7 +276,9 @@ class FriendsPage extends ConsumerWidget {
                         .state = friend.id;
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('"${friend.name}"님이 현재 무전 대상입니다.'),
+                        content: Text(
+                          '"${friend.name}"님이 현재 무전 대상입니다.',
+                        ),
                         duration: const Duration(seconds: 2),
                       ),
                     );

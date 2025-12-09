@@ -1,8 +1,8 @@
 // NOTE: 설계도 v1.1 기준 신고(Abuse) 레이어 구현 파일로,
 // 메타데이터만 로그/저장하며 실제 콘텐츠는 다루지 않는다.
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:voyage/ptt_debug_log.dart';
 
 enum AbuseReason {
   spam,
@@ -31,11 +31,14 @@ class AbuseReport {
 
 class AbuseApiClient {
   Future<void> submitReport(AbuseReport report) async {
-    debugPrint(
-      '[Safety][ReportApi] submitReport '
-      'friendId=${report.friendId} '
-      'messageId=${report.messageId ?? '(none)'} '
-      'reason=${report.reason.name}',
+    PttLogger.log(
+      '[Safety][ReportApi]',
+      'submitReport',
+      meta: <String, Object?>{
+        'friendId': report.friendId,
+        'messageId': report.messageId ?? '(none)',
+        'reason': report.reason.name,
+      },
     );
     // TODO: 실제 서버 연동을 추가한다 (HTTP API 등).
   }
@@ -63,11 +66,15 @@ class AbuseReportsNotifier extends StateNotifier<List<AbuseReport>> {
     );
     state = [...state, report];
 
-    debugPrint(
-      '[Safety][Report] friendId=$friendId '
-      'messageId=${messageId ?? '(none)'} '
-      'reason=${reason.name} '
-      'timestamp=${now.toIso8601String()}',
+    PttLogger.log(
+      '[Safety][Report]',
+      'addReport',
+      meta: <String, Object?>{
+        'friendId': friendId,
+        'messageId': messageId ?? '(none)',
+        'reason': reason.name,
+        'timestamp': now.toIso8601String(),
+      },
     );
 
     await _api.submitReport(report);
@@ -78,4 +85,3 @@ final abuseReportsProvider =
     StateNotifierProvider<AbuseReportsNotifier, List<AbuseReport>>(
   (ref) => AbuseReportsNotifier(AbuseApiClient()),
 );
-

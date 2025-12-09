@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:voyage/auth/auth_state_notifier.dart';
 import 'package:voyage/feature_flags.dart';
 
 final _beepOnStartProvider = StateProvider<bool>((ref) => false);
@@ -53,6 +55,21 @@ class SettingsPage extends ConsumerWidget {
                     ),
                   ],
                 ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: ListTile(
+                title: const Text('디버그 로그 보기'),
+                subtitle: const Text(
+                  '최근 PTT/Backend/Auth 로그를 확인하고 복사합니다.',
+                ),
+                trailing: const Icon(Icons.bug_report_outlined),
+                onTap: () {
+                  if (context.mounted) {
+                    context.push('/debug/logs');
+                  }
+                },
               ),
             ),
             const SizedBox(height: 16),
@@ -154,6 +171,55 @@ class SettingsPage extends ConsumerWidget {
                     },
                   ),
                 ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: ListTile(
+                title: const Text('로그아웃'),
+                subtitle: const Text(
+                  '현재 프로필을 초기화하고 온보딩 화면으로 돌아갑니다.',
+                ),
+                trailing: const Icon(Icons.logout),
+                onTap: () async {
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (context) {
+                      return AlertDialog(
+                        title: const Text('로그아웃'),
+                        content: const Text(
+                          '로그아웃하면 다시 프로필을 설정해야 합니다. '
+                          '계속할까요?',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () {
+                              Navigator.of(context).pop(false);
+                            },
+                            child: const Text('취소'),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              Navigator.of(context).pop(true);
+                            },
+                            child: const Text('로그아웃'),
+                          ),
+                        ],
+                      );
+                    },
+                  );
+                  if (confirmed != true) {
+                    return;
+                  }
+
+                  await ref
+                      .read(authStateNotifierProvider.notifier)
+                      .signOut();
+
+                  if (context.mounted) {
+                    context.go('/onboarding/profile');
+                  }
+                },
               ),
             ),
           ],

@@ -2,6 +2,7 @@
 
 import 'dart:async';
 
+import 'package:voyage/ptt_debug_log.dart';
 import 'voice_transport.dart';
 
 /// 네트워크 없이 로컬에서만 녹음/재생을 테스트하기 위한
@@ -15,31 +16,52 @@ class LocalFakeVoiceTransport implements VoiceTransport {
 
   @override
   Future<void> warmUp() async {
-    print('[PTT][LocalFakeVoiceTransport] warmUp() called');
+    PttLogger.log(
+      '[PTT][LocalFakeVoiceTransport]',
+      'warmUp',
+    );
   }
 
   @override
   Future<void> connect({required String url, required String token}) async {
-    print('[PTT][LocalFakeVoiceTransport] connect() called');
+    PttLogger.log(
+      '[PTT][LocalFakeVoiceTransport]',
+      'connect',
+      meta: <String, Object?>{
+        'url': url,
+      },
+    );
   }
 
   @override
   Future<void> startPublishing(Stream<List<int>> opus) async {
-    print('[PTT][LocalFakeVoiceTransport] startPublishing() called');
+    PttLogger.log(
+      '[PTT][LocalFakeVoiceTransport]',
+      'startPublishing',
+    );
   }
 
   @override
   Future<void> stopPublishing() async {
-    print('[PTT][LocalFakeVoiceTransport] stopPublishing() called');
+    PttLogger.log(
+      '[PTT][LocalFakeVoiceTransport]',
+      'stopPublishing',
+    );
   }
 
   @override
   Future<void> disconnect() async {
-    print('[PTT][LocalFakeVoiceTransport] disconnect() called');
+    PttLogger.log(
+      '[PTT][LocalFakeVoiceTransport]',
+      'disconnect',
+    );
   }
 
   @override
   Future<void> coolDown() async {
-    print('[PTT][LocalFakeVoiceTransport] coolDown() called');
+    PttLogger.log(
+      '[PTT][LocalFakeVoiceTransport]',
+      'coolDown',
+    );
   }
 }

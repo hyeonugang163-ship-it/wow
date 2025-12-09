@@ -64,4 +64,19 @@ class MainActivity : FlutterActivity() {
             }
         }
     }
+
+    override fun onPause() {
+        super.onPause()
+        Log.d("MainActivity", "[PTT][Lifecycle] onPause")
+    }
+
+    override fun onStop() {
+        super.onStop()
+        Log.d("MainActivity", "[PTT][Lifecycle] onStop")
+    }
+
+    override fun onDestroy() {
+        Log.d("MainActivity", "[PTT][Lifecycle] onDestroy")
+        super.onDestroy()
+    }
 }

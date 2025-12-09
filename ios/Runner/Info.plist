@@ -45,5 +45,11 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- NOTE: 설계도 v1.1 기준 iOS A안(APNs→탭→포그라운드→재생)을 위해
+	     Remote notifications 백그라운드 모드를 사용한다. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 </dict>
 </plist>

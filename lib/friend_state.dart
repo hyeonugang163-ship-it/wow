@@ -1,27 +1,46 @@
 // NOTE: 설계도 v1.1 기준 친구 리스트/무전 허용/차단 상태를 관리하며,
 // Block 상태에 따라 Walkie/Manner PTT가 막히도록 사용된다.
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:voyage/backend/backend_providers.dart';
+import 'package:voyage/backend/repositories.dart';
 import 'package:voyage/friend.dart';
+import 'package:voyage/ptt_debug_log.dart';
 
 class FriendListNotifier extends StateNotifier<List<Friend>> {
-  FriendListNotifier() : super(_initialFriends);
+  FriendListNotifier(this._repository) : super(const <Friend>[]);
 
-  // TODO: remove dummy friends when wiring real backend.
-  static const List<Friend> _initialFriends = [
-    Friend(id: 'u1', name: '친구 1', status: '항상 무전 가능'),
-    Friend(id: 'u2', name: '친구 2', status: '가끔 응답'),
-    Friend(id: 'u3', name: '친구 3', status: '업무 시간만 무전'),
-    Friend(id: 'u4', name: '친구 4', status: '야간 근무 중'),
-  ];
+  final FriendRepository _repository;
+
+  Future<void> loadInitial() async {
+    try {
+      final friends = await _repository.loadFriends();
+      state = friends;
+      PttLogger.log(
+        '[Friends][State]',
+        'initial friends loaded',
+        meta: <String, Object?>{'count': friends.length},
+      );
+    } catch (e) {
+      PttLogger.log(
+        '[Friends][State]',
+        'failed to load initial friends',
+        meta: <String, Object?>{'error': e.toString()},
+      );
+    }
+  }
 
   // 이후에 상태 변경(온라인/오프라인 등) 메서드들을 추가할 수 있다.
 }
 
 final friendListProvider =
     StateNotifierProvider<FriendListNotifier, List<Friend>>(
-  (ref) => FriendListNotifier(),
+  (ref) {
+    final repository = ref.read(friendRepositoryProvider);
+    final notifier = FriendListNotifier(repository);
+    notifier.loadInitial();
+    return notifier;
+  },
 );
 
 final currentPttFriendIdProvider = StateProvider<String?>(
@@ -29,9 +48,11 @@ final currentPttFriendIdProvider = StateProvider<String?>(
 );
 
 class FriendPttAllowNotifier extends StateNotifier<Map<String, bool>> {
-  FriendPttAllowNotifier() : super(const {});
+  FriendPttAllowNotifier(this._repository) : super(const {});
 
-  void setAllowed(String friendId, bool allowed) {
+  final FriendRepository _repository;
+
+  Future<void> setAllowed(String friendId, bool allowed) async {
     final newState = Map<String, bool>.from(state);
     if (allowed) {
       newState[friendId] = true;
@@ -39,6 +60,8 @@ class FriendPttAllowNotifier extends StateNotifier<Map<String, bool>> {
       newState.remove(friendId);
     }
     state = newState;
+
+    await _repository.syncPttAllow(friendId, allowed);
   }
 
   bool isAllowed(String friendId) {
@@ -48,13 +71,18 @@ class FriendPttAllowNotifier extends StateNotifier<Map<String, bool>> {
 
 final friendPttAllowProvider =
     StateNotifierProvider<FriendPttAllowNotifier, Map<String, bool>>(
-  (ref) => FriendPttAllowNotifier(),
+  (ref) {
+    final repository = ref.read(friendRepositoryProvider);
+    return FriendPttAllowNotifier(repository);
+  },
 );
 
 class FriendBlockNotifier extends StateNotifier<Map<String, bool>> {
-  FriendBlockNotifier() : super(const {});
+  FriendBlockNotifier(this._repository) : super(const {});
 
-  void setBlocked(String friendId, bool blocked) {
+  final FriendRepository _repository;
+
+  Future<void> setBlocked(String friendId, bool blocked) async {
     final next = Map<String, bool>.from(state);
     if (blocked) {
       next[friendId] = true;
@@ -62,6 +90,12 @@ class FriendBlockNotifier extends StateNotifier<Map<String, bool>> {
       next.remove(friendId);
     }
     state = next;
+
+    if (blocked) {
+      await _repository.block(friendId);
+    } else {
+      await _repository.unblock(friendId);
+    }
   }
 
   bool isBlocked(String friendId) {
@@ -71,7 +105,10 @@ class FriendBlockNotifier extends StateNotifier<Map<String, bool>> {
 
 final friendBlockProvider =
     StateNotifierProvider<FriendBlockNotifier, Map<String, bool>>(
-  (ref) => FriendBlockNotifier(),
+  (ref) {
+    final repository = ref.read(friendRepositoryProvider);
+    return FriendBlockNotifier(repository);
+  },
 );
 
 void reportFriendAbuse({
@@ -79,7 +116,13 @@ void reportFriendAbuse({
   String reason = 'manual_report',
 }) {
   final timestamp = DateTime.now().toIso8601String();
-  debugPrint(
-    '[Safety][Report] friendId=$friendId reason=$reason timestamp=$timestamp',
+  PttLogger.log(
+    '[Safety][Report]',
+    'friend abuse reported',
+    meta: <String, Object?>{
+      'friendId': friendId,
+      'reason': reason,
+      'timestamp': timestamp,
+    },
   );
 }

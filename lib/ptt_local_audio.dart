@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
+import 'package:voyage/ptt_ui_event.dart';
 
 class PttLocalAudioEngine {
   PttLocalAudioEngine()
@@ -16,6 +17,7 @@ class PttLocalAudioEngine {
   final AudioPlayer _player;
 
   bool _initialized = false;
+  bool _hasEmittedMicPermissionMissing = false;
 
   /// Absolute path for the current recording file, if any.
   String? _currentFilePath;
@@ -46,6 +48,10 @@ class PttLocalAudioEngine {
         debugPrint(
           '[PTT][LocalAudio] no microphone permission on init',
         );
+        if (!_hasEmittedMicPermissionMissing) {
+          _hasEmittedMicPermissionMissing = true;
+          PttUiEventBus.emit(PttUiEvents.micPermissionMissing());
+        }
       }
     } catch (e) {
       debugPrint('[PTT][LocalAudio] init error: $e');
@@ -67,14 +73,18 @@ class PttLocalAudioEngine {
         await init();
       }
 
-	      final hasPermission = await _recorder.hasPermission();
-	      if (!hasPermission) {
-	        debugPrint(
-	          '[PTT][Permission] microphone not granted on startRecording',
-	        );
-	        _currentFilePath = null;
-	        return;
-	      }
+      final hasPermission = await _recorder.hasPermission();
+      if (!hasPermission) {
+        debugPrint(
+          '[PTT][Permission] microphone not granted on startRecording',
+        );
+        if (!_hasEmittedMicPermissionMissing) {
+          _hasEmittedMicPermissionMissing = true;
+          PttUiEventBus.emit(PttUiEvents.micPermissionMissing());
+        }
+        _currentFilePath = null;
+        return;
+      }
 
       final isRecording = await _recorder.isRecording();
       if (isRecording) {

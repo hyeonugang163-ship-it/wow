@@ -13,6 +13,8 @@ class PolicyConfig {
   final bool callKitVoip; // iOS VoIP Push + CallKit 사용 여부
   final bool forceTurnTcpTls443; // TURN 443 강제 여부
   final int pttMinIntervalMillis; // PTT 호출 간 최소 간격(ms) - 글로벌 쿨다운
+  final bool useFakeVoiceTransport; // true이면 항상 LocalFakeVoiceTransport 사용
+  final bool useFakeBackend; // true이면 Fake backend/repositories 사용
 
   const PolicyConfig({
     required this.androidInstantPlay,
@@ -22,6 +24,8 @@ class PolicyConfig {
     required this.callKitVoip,
     required this.forceTurnTcpTls443,
     required this.pttMinIntervalMillis,
+    required this.useFakeVoiceTransport,
+    required this.useFakeBackend,
   });
 
   factory PolicyConfig.fromJson(Map<String, dynamic> json) {
@@ -36,6 +40,10 @@ class PolicyConfig {
           (json['forceTurnTcpTls443'] as bool?) ?? false,
       pttMinIntervalMillis:
           (json['pttMinIntervalMillis'] as int?) ?? 300,
+      useFakeVoiceTransport:
+          (json['useFakeVoiceTransport'] as bool?) ?? true,
+      useFakeBackend:
+          (json['useFakeBackend'] as bool?) ?? true,
     );
   }
 
@@ -47,6 +55,8 @@ class PolicyConfig {
     callKitVoip: false,
     forceTurnTcpTls443: false,
     pttMinIntervalMillis: 300,
+    useFakeVoiceTransport: true,
+    useFakeBackend: true,
   );
 
   PolicyConfig copyWith({
@@ -57,6 +67,8 @@ class PolicyConfig {
     bool? callKitVoip,
     bool? forceTurnTcpTls443,
     int? pttMinIntervalMillis,
+    bool? useFakeVoiceTransport,
+    bool? useFakeBackend,
   }) {
     return PolicyConfig(
       androidInstantPlay: androidInstantPlay ?? this.androidInstantPlay,
@@ -72,6 +84,10 @@ class PolicyConfig {
           forceTurnTcpTls443 ?? this.forceTurnTcpTls443,
       pttMinIntervalMillis:
           pttMinIntervalMillis ?? this.pttMinIntervalMillis,
+      useFakeVoiceTransport:
+          useFakeVoiceTransport ?? this.useFakeVoiceTransport,
+      useFakeBackend:
+          useFakeBackend ?? this.useFakeBackend,
     );
   }
 }
@@ -118,4 +134,6 @@ class FF {
   static bool get callKitVoip => policy.callKitVoip;
   static bool get forceTurnTcpTls443 => policy.forceTurnTcpTls443;
   static int get pttMinIntervalMillis => policy.pttMinIntervalMillis;
+  static bool get useFakeVoiceTransport => policy.useFakeVoiceTransport;
+  static bool get useFakeBackend => policy.useFakeBackend;
 }
