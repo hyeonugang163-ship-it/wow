@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:voyage/app_env.dart';
 import 'package:voyage/auth/auth_state_notifier.dart';
 import 'package:voyage/feature_flags.dart';
 
@@ -16,6 +17,7 @@ class SettingsPage extends ConsumerWidget {
     final beepOnStart = ref.watch(_beepOnStartProvider);
     final beepOnEnd = ref.watch(_beepOnEndProvider);
     final vibrateInWalkie = ref.watch(_vibrateInWalkieProvider);
+    final env = AppEnv.current;
 
     return Scaffold(
       appBar: AppBar(
@@ -60,19 +62,36 @@ class SettingsPage extends ConsumerWidget {
             const SizedBox(height: 16),
             Card(
               child: ListTile(
-                title: const Text('디버그 로그 보기'),
+                title: const Text('프리알파 안내'),
                 subtitle: const Text(
-                  '최근 PTT/Backend/Auth 로그를 확인하고 복사합니다.',
+                  '이 빌드의 목적과 제한사항, 버그 제보 방법을 확인합니다.',
                 ),
-                trailing: const Icon(Icons.bug_report_outlined),
+                trailing: const Icon(Icons.info_outline),
                 onTap: () {
                   if (context.mounted) {
-                    context.push('/debug/logs');
+                    context.push('/pre-alpha-info');
                   }
                 },
               ),
             ),
             const SizedBox(height: 16),
+            if (env != AppEnvironment.prod) ...[
+              Card(
+                child: ListTile(
+                  title: const Text('디버그 로그 보기'),
+                  subtitle: const Text(
+                    '최근 PTT/Backend/Auth 로그를 확인하고 복사합니다.',
+                  ),
+                  trailing: const Icon(Icons.bug_report_outlined),
+                  onTap: () {
+                    if (context.mounted) {
+                      context.push('/debug/logs');
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
             Card(
               child: Column(
                 children: [
@@ -130,50 +149,52 @@ class SettingsPage extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 16),
-            Card(
-              child: Column(
-                children: [
-                  const ListTile(
-                    title: Text(
-                      '실험적 옵션 (아직 실제 동작 없음)',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+            if (env != AppEnvironment.prod) ...[
+              Card(
+                child: Column(
+                  children: [
+                    const ListTile(
+                      title: Text(
+                        '실험적 옵션 (아직 실제 동작 없음)',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      subtitle: Text(
+                        '향후 PTT UX를 튜닝할 때 사용할 수 있는 옵션들입니다. 현재는 UI에서만 on/off가 바뀌고 실제 PTT 로직에는 영향을 주지 않습니다.',
                       ),
                     ),
-                    subtitle: Text(
-                      '향후 PTT UX를 튜닝할 때 사용할 수 있는 옵션들입니다. 현재는 UI에서만 on/off가 바뀌고 실제 PTT 로직에는 영향을 주지 않습니다.',
+                    const Divider(height: 1),
+                    SwitchListTile(
+                      title: const Text('PTT 시작 전 짧은 비프음 재생'),
+                      value: beepOnStart,
+                      onChanged: (value) {
+                        ref.read(_beepOnStartProvider.notifier).state =
+                            value;
+                      },
                     ),
-                  ),
-                  const Divider(height: 1),
-                  SwitchListTile(
-                    title: const Text('PTT 시작 전 짧은 비프음 재생'),
-                    value: beepOnStart,
-                    onChanged: (value) {
-                      ref.read(_beepOnStartProvider.notifier).state =
-                          value;
-                    },
-                  ),
-                  SwitchListTile(
-                    title: const Text('PTT 종료 후 짧은 비프음 재생'),
-                    value: beepOnEnd,
-                    onChanged: (value) {
-                      ref.read(_beepOnEndProvider.notifier).state = value;
-                    },
-                  ),
-                  SwitchListTile(
-                    title: const Text('무전모드에서만 진동 허용'),
-                    value: vibrateInWalkie,
-                    onChanged: (value) {
-                      ref
-                          .read(_vibrateInWalkieProvider.notifier)
-                          .state = value;
-                    },
-                  ),
-                ],
+                    SwitchListTile(
+                      title: const Text('PTT 종료 후 짧은 비프음 재생'),
+                      value: beepOnEnd,
+                      onChanged: (value) {
+                        ref.read(_beepOnEndProvider.notifier).state = value;
+                      },
+                    ),
+                    SwitchListTile(
+                      title: const Text('무전모드에서만 진동 허용'),
+                      value: vibrateInWalkie,
+                      onChanged: (value) {
+                        ref
+                            .read(_vibrateInWalkieProvider.notifier)
+                            .state = value;
+                      },
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
+              const SizedBox(height: 16),
+            ],
             Card(
               child: ListTile(
                 title: const Text('로그아웃'),

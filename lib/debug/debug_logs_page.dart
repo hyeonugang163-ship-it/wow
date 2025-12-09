@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:voyage/app_env.dart';
 import 'package:voyage/auth/auth_state_notifier.dart';
 import 'package:voyage/debug/issue_report_builder.dart';
 import 'package:voyage/debug/ptt_log_buffer.dart';
@@ -71,6 +72,7 @@ class _DebugLogsPageState extends ConsumerState<DebugLogsPage> {
     final currentMode = ref.read(pttModeProvider);
     final settings = DebugAppSettings(
       platform: Theme.of(context).platform.name,
+      env: AppEnv.current.name,
       useFakeBackend: FF.useFakeBackend,
       useFakeVoiceTransport: FF.useFakeVoiceTransport,
     );
@@ -202,4 +204,3 @@ class _DebugLogsPageState extends ConsumerState<DebugLogsPage> {
     );
   }
 }
-

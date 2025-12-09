@@ -3,18 +3,6 @@ import 'package:voyage/debug/ptt_log_buffer.dart';
 import 'package:voyage/feature_flags.dart';
 import 'package:voyage/ptt_debug_log.dart';
 
-class DebugAppSettings {
-  const DebugAppSettings({
-    required this.platform,
-    required this.useFakeBackend,
-    required this.useFakeVoiceTransport,
-  });
-
-  final String platform;
-  final bool useFakeBackend;
-  final bool useFakeVoiceTransport;
-}
-
 class IssueReportBuilder {
   static String build({
     required DebugAppSettings settings,
@@ -29,6 +17,7 @@ class IssueReportBuilder {
     buffer.writeln('');
     buffer.writeln('--- Environment / User ---');
     buffer.writeln('platform: ${settings.platform}');
+    buffer.writeln('env: ${settings.env}');
     buffer.writeln('useFakeBackend: ${settings.useFakeBackend}');
     buffer.writeln(
       'useFakeVoiceTransport: ${settings.useFakeVoiceTransport}',
@@ -88,4 +77,18 @@ class IssueReportBuilder {
     final ms = at.millisecond.toString().padLeft(3, '0');
     return '$h:$m:$s.$ms';
   }
+}
+
+class DebugAppSettings {
+  const DebugAppSettings({
+    required this.platform,
+    required this.env,
+    required this.useFakeBackend,
+    required this.useFakeVoiceTransport,
+  });
+
+  final String platform;
+  final String env;
+  final bool useFakeBackend;
+  final bool useFakeVoiceTransport;
 }

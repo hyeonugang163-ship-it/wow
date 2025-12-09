@@ -11,6 +11,7 @@ import 'package:voyage/debug/debug_logs_page.dart';
 import 'package:voyage/friends_page.dart';
 import 'package:voyage/onboarding/profile_onboarding_page.dart';
 import 'package:voyage/ptt_home_page.dart';
+import 'package:voyage/pre_alpha_info_page.dart';
 import 'package:voyage/settings_page.dart';
 
 GoRouter? _globalRouter;
@@ -78,6 +79,11 @@ final appRouterProvider = Provider<GoRouter>(
           path: '/settings',
           name: 'settings',
           builder: (context, state) => const SettingsPage(),
+        ),
+        GoRoute(
+          path: '/pre-alpha-info',
+          name: 'pre_alpha_info',
+          builder: (context, state) => const PreAlphaInfoPage(),
         ),
         GoRoute(
           path: '/debug/logs',

@@ -1,4 +1,7 @@
-// NOTE: 설계도 v1.1 기준 PolicyConfig/FF 구조와 거의 일치하며, PTT 쿨다운/Android FGS 플래그를 추가로 포함한다.
+// NOTE: 설계도 v1.1 기준 PolicyConfig/FF 구조와 거의 일치하며,
+// PTT 쿨다운/Android FGS 플래그를 추가로 포함한다.
+
+import 'package:voyage/app_env.dart';
 
 enum PttMode {
   walkie, // 무전모드 (즉시 재생 시도)
@@ -136,4 +139,58 @@ class FF {
   static int get pttMinIntervalMillis => policy.pttMinIntervalMillis;
   static bool get useFakeVoiceTransport => policy.useFakeVoiceTransport;
   static bool get useFakeBackend => policy.useFakeBackend;
+
+  /// 현재 AppEnvironment에 따라 기본 PolicyConfig를 초기화한다.
+  ///
+  /// 서버에서 별도의 정책을 내려주지 않는 경우에만 사용되며,
+  /// 이후 applyPolicy가 호출되면 해당 값으로 덮어쓴다.
+  static void initForEnv() {
+    final env = AppEnv.current;
+
+    PolicyConfig base;
+    switch (env) {
+      case AppEnvironment.dev:
+        base = const PolicyConfig(
+          androidInstantPlay: true,
+          enableAndroidPttForegroundService: true,
+          iosModeA_PushTapPlay: true,
+          iosModeB_PTTFramework: false,
+          callKitVoip: false,
+          forceTurnTcpTls443: false,
+          pttMinIntervalMillis: 300,
+          useFakeVoiceTransport: true,
+          useFakeBackend: true,
+        );
+        break;
+      case AppEnvironment.alpha:
+        base = const PolicyConfig(
+          androidInstantPlay: true,
+          enableAndroidPttForegroundService: true,
+          iosModeA_PushTapPlay: true,
+          iosModeB_PTTFramework: false,
+          callKitVoip: false,
+          forceTurnTcpTls443: false,
+          pttMinIntervalMillis: 300,
+          useFakeVoiceTransport: true,
+          useFakeBackend: true,
+        );
+        break;
+      case AppEnvironment.prod:
+        base = const PolicyConfig(
+          androidInstantPlay: true,
+          enableAndroidPttForegroundService: true,
+          iosModeA_PushTapPlay: true,
+          iosModeB_PTTFramework: false,
+          callKitVoip: false,
+          forceTurnTcpTls443: false,
+          pttMinIntervalMillis: 300,
+          useFakeVoiceTransport: false,
+          useFakeBackend: false,
+        );
+        break;
+    }
+
+    _raw = base;
+    _recomputeEffective();
+  }
 }
