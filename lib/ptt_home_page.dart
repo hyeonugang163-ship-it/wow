@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:voyage/chat_page.dart';
 import 'package:voyage/auth/auth_state.dart';
 import 'package:voyage/auth/auth_state_notifier.dart';
 import 'package:voyage/feature_flags.dart';
@@ -17,12 +18,13 @@ import 'package:voyage/ptt_controller.dart';
 import 'package:voyage/ptt_debug_overlay.dart';
 import 'package:voyage/ptt_strings.dart';
 import 'package:voyage/ptt_ui_event.dart';
+import 'package:voyage/ptt/ptt_mode_provider.dart';
 
 /// Minimum hold duration before PTT actually starts.
 ///
 /// TODO: move to PolicyConfig / FeatureFlags if we need
 /// platform- or market-specific tuning.
-const Duration kPttMinHoldDuration = Duration(seconds: 1);
+const Duration kPttMinHoldDuration = Duration(milliseconds: 200);
 
 class PttHomePage extends ConsumerStatefulWidget {
   const PttHomePage({super.key});
@@ -224,6 +226,8 @@ class _PttHomePageState extends ConsumerState<PttHomePage> {
     }
 
     final bool isFriendBlocked = friendBlocked;
+    final bool isWalkieAllowed =
+        friendAllowed && !friendBlocked;
 
     return Scaffold(
       appBar: AppBar(
@@ -275,39 +279,71 @@ class _PttHomePageState extends ConsumerState<PttHomePage> {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text('모드'),
-                const SizedBox(width: 12),
-                ChoiceChip(
-                  label: const Text('무전모드'),
-                  selected: mode == PttMode.walkie,
-                  onSelected: (_) {
-                    ref.read(pttModeProvider.notifier).state =
-                        PttMode.walkie;
-                  },
-                ),
-                const SizedBox(width: 8),
-                ChoiceChip(
-                  label: const Text('매너모드'),
-                  selected: mode == PttMode.manner,
-                  onSelected: (_) {
-                    ref.read(pttModeProvider.notifier).state =
-                        PttMode.manner;
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
             Align(
               alignment: Alignment.center,
-              child: Text(
-                targetStatusText,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium,
+              child: InkWell(
+                onTap: currentFriend == null
+                    ? null
+                    : () {
+                        final friend = currentFriend;
+                        final args = PttChatRouteArgs(
+                          friendId: friend.id,
+                          friendName: friend.name,
+                          // 현재 단계에서는 로컬 무전 허용/차단 상태를
+                          // 기반으로 상호 무전 허용 여부를 추정한다.
+                          isWalkieAllowed: isWalkieAllowed,
+                        );
+                        context.pushNamed(
+                          'chat',
+                          pathParameters: <String, String>{
+                            'id': friend.id,
+                          },
+                          extra: args,
+                        );
+                      },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 4,
+                    horizontal: 8,
+                  ),
+                  child: Text(
+                    targetStatusText,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
               ),
             ),
+            if (currentFriend != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text('무전 허용'),
+                  const SizedBox(width: 8),
+                  Switch(
+                    value: isWalkieAllowed,
+                    onChanged: (value) async {
+                      if (friendBlocked) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              '"${currentFriend.name}"은(는) 차단되어 있어 '
+                              '무전 허용을 변경할 수 없습니다.',
+                            ),
+                            duration: const Duration(seconds: 2),
+                          ),
+                        );
+                        return;
+                      }
+                      await ref
+                          .read(friendPttAllowProvider.notifier)
+                          .setAllowed(currentFriend.id, value);
+                    },
+                  ),
+                ],
+              ),
+            ],
                 const SizedBox(height: 24),
                 Expanded(
                   child: Center(

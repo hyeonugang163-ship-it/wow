@@ -72,7 +72,15 @@ final appRouterProvider = Provider<GoRouter>(
           name: 'chat',
           builder: (context, state) {
             final id = state.pathParameters['id'] ?? 'unknown';
-            return ChatPage(chatId: id);
+            final extra = state.extra;
+            PttChatRouteArgs? args;
+            if (extra is PttChatRouteArgs) {
+              args = extra;
+            }
+            return ChatPage(
+              chatId: id,
+              pttArgs: args,
+            );
           },
         ),
         GoRoute(

@@ -6,9 +6,27 @@ import 'package:voyage/chat_message.dart';
 import 'package:voyage/chat_state.dart';
 import 'package:voyage/chat_voice_player.dart';
 import 'package:voyage/conversation_state.dart';
+import 'package:voyage/feature_flags.dart';
 import 'package:voyage/friend_state.dart';
+import 'package:voyage/ptt/ptt_mode_provider.dart';
 
 final _chatControllers = <String, TextEditingController>{};
+
+class PttChatRouteArgs {
+  const PttChatRouteArgs({
+    required this.friendId,
+    required this.friendName,
+    required this.isWalkieAllowed,
+  });
+
+  final String friendId;
+  final String friendName;
+
+  /// 설계도 기준 "서로 무전 허용 동의된 친구" 여부.
+  /// 현재 단계에서는 로컬 무전 허용/차단 상태를 바탕으로 계산된 값이며,
+  /// 추후 서버 상호동의 정보와 연동될 수 있다.
+  final bool isWalkieAllowed;
+}
 
 /// Manual test – voice bubble playback UX
 /// 1) Manner 모드에서 친구 A에게 음성 메시지 2개를 보낸다.
@@ -22,9 +40,14 @@ final _chatControllers = <String, TextEditingController>{};
 /// 6) (선택) 파일을 삭제하거나 존재하지 않는 path를 가진 메시지를 만들어
 ///    error 상태 아이콘/텍스트가 잘 표시되는지 확인한다.
 class ChatPage extends ConsumerWidget {
-  const ChatPage({super.key, required this.chatId});
+  const ChatPage({
+    super.key,
+    required this.chatId,
+    this.pttArgs,
+  });
 
   final String chatId;
+  final PttChatRouteArgs? pttArgs;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -38,6 +61,33 @@ class ChatPage extends ConsumerWidget {
     final List<ChatMessage> messages =
         notifier.messagesForChat(chatId).reversed.toList();
 
+    final mode = ref.watch(pttModeProvider);
+    final friends = ref.watch(friendListProvider);
+    String? friendName;
+    final matches =
+        friends.where((friend) => friend.id == chatId);
+    if (matches.isNotEmpty) {
+      friendName = matches.first.name;
+    }
+
+    final args = pttArgs;
+    final effectiveFriendName =
+        args?.friendName ?? friendName ?? chatId;
+    final isWalkieAllowed = args?.isWalkieAllowed ?? false;
+
+    String modeSubtitle;
+    if (mode == PttMode.walkie) {
+      if (isWalkieAllowed) {
+        modeSubtitle =
+            '무전모드 · 이 친구는 즉시 재생 허용';
+      } else {
+        modeSubtitle =
+            '무전모드 · 아직 이 친구와는 무전 허용이 안 됨 (녹음본으로 수신)';
+      }
+    } else {
+      modeSubtitle = '매너모드 · 모든 친구와 녹음본으로만 수신';
+    }
+
     final controller = _chatControllers.putIfAbsent(
       chatId,
       () => TextEditingController(),
@@ -45,7 +95,24 @@ class ChatPage extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Chat $chatId'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              effectiveFriendName,
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              modeSubtitle,
+              style: Theme.of(context)
+                  .textTheme
+                  .labelSmall,
+            ),
+          ],
+        ),
       ),
       body: Column(
         children: [

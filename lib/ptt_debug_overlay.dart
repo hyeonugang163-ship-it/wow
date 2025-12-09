@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyage/friend_state.dart';
-import 'package:voyage/ptt_controller.dart';
 import 'package:voyage/ptt_debug_log.dart';
 import 'package:voyage/ptt_metrics.dart';
+import 'package:voyage/ptt/ptt_mode_provider.dart';
 
 class PttDebugOverlay extends ConsumerWidget {
   const PttDebugOverlay({super.key});
@@ -114,4 +114,3 @@ class PttDebugOverlay extends ConsumerWidget {
     return '$h:$m:$s';
   }
 }
-

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:voyage/app_env.dart';
 import 'package:voyage/auth/auth_state_notifier.dart';
 import 'package:voyage/feature_flags.dart';
+import 'package:voyage/ptt/ptt_mode_provider.dart';
 
 final _beepOnStartProvider = StateProvider<bool>((ref) => false);
 final _beepOnEndProvider = StateProvider<bool>((ref) => false);
@@ -17,6 +18,7 @@ class SettingsPage extends ConsumerWidget {
     final beepOnStart = ref.watch(_beepOnStartProvider);
     final beepOnEnd = ref.watch(_beepOnEndProvider);
     final vibrateInWalkie = ref.watch(_vibrateInWalkieProvider);
+    final mode = ref.watch(pttModeProvider);
     final env = AppEnv.current;
 
     return Scaffold(
@@ -57,6 +59,27 @@ class SettingsPage extends ConsumerWidget {
                     ),
                   ],
                 ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: SwitchListTile(
+                title: const Text('무전 모드 (Walkie)'),
+                subtitle: Text(
+                  mode == PttMode.walkie
+                      ? '상호 무전 허용 친구에게만 즉시 재생 무전을 보낼 수 있어요.'
+                      : '지금은 매너모드입니다. 모든 친구와 음성 노트만 주고받아요.',
+                ),
+                value: mode == PttMode.walkie,
+                onChanged: (value) {
+                  ref
+                      .read(pttModeProvider.notifier)
+                      .setMode(
+                        value
+                            ? PttMode.walkie
+                            : PttMode.manner,
+                      );
+                },
               ),
             ),
             const SizedBox(height: 16),

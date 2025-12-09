@@ -7,6 +7,7 @@ enum PttUiEventType {
   rateLimitSoft,
   friendBlocked,
   friendNotAllowWalkie,
+  mannerModeNoInstantPtt,
   micPermissionMissing,
   fgsError,
   genericError,
@@ -68,6 +69,8 @@ class PttUiMessageKeys {
   static const String rateLimitSoft = 'ptt.rateLimitSoft';
   static const String friendBlocked = 'ptt.friendBlocked';
   static const String friendNotAllowWalkie = 'ptt.friendNotAllowWalkie';
+   static const String mannerModeNoInstantPtt =
+       'ptt.mannerModeNoInstantPtt';
   static const String noFriendSelected = 'ptt.noFriendSelected';
   static const String micPermissionMissing = 'ptt.micPermissionMissing';
   static const String fgsError = 'ptt.fgsError';
@@ -154,6 +157,19 @@ class PttUiEvents {
     );
   }
 
+  static PttUiEvent mannerModeNoInstantPtt({
+    String? friendId,
+  }) {
+    return PttUiEvent(
+      type: PttUiEventType.mannerModeNoInstantPtt,
+      messageKey: PttUiMessageKeys.mannerModeNoInstantPtt,
+      meta: <String, Object?>{
+        if (friendId != null) 'friendId': friendId,
+      },
+      at: DateTime.now(),
+    );
+  }
+
   static PttUiEvent noFriendSelected({
     PttMode? mode,
   }) {
@@ -211,4 +227,3 @@ class PttUiEvents {
     );
   }
 }
-

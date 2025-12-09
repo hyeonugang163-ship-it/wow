@@ -12,7 +12,12 @@ class PttStrings {
       '차단한 친구에게는 무전을 보낼 수 없습니다.';
 
   static const String friendNotAllowWalkie =
-      '이 친구는 무전 허용이 꺼져 있어, 매너모드로 전송됩니다.';
+      '이 친구는 아직 상호 무전 허용이 안 되어 있어, '
+      '즉시 재생 대신 녹음본(음성 노트)으로만 전송됩니다.';
+
+  static const String mannerModeNoInstantPtt =
+      '지금은 매너모드입니다. 이 친구와는 즉시 재생 무전 대신 '
+      '음성 노트로만 보낼 수 있어요.';
 
   static const String noFriendSelected =
       '무전 버튼을 쓰기 전에 Friends 화면에서 '
@@ -48,6 +53,8 @@ class PttUiMessages {
         return PttStrings.friendBlocked;
       case 'ptt.friendNotAllowWalkie':
         return PttStrings.friendNotAllowWalkie;
+      case 'ptt.mannerModeNoInstantPtt':
+        return PttStrings.mannerModeNoInstantPtt;
       case 'ptt.noFriendSelected':
         return PttStrings.noFriendSelected;
       case 'ptt.micPermissionMissing':
@@ -63,4 +70,3 @@ class PttUiMessages {
     }
   }
 }
-

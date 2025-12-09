@@ -27,6 +27,15 @@ abstract class FriendRepository {
 
   Future<void> syncPttAllow(String friendId, bool allow);
 
+  /// 친구별 무전 허용 여부를 설정한다.
+  ///
+  /// 현재는 Fake/로컬 구현에서만 사용되며,
+  /// 추후 실제 서버 동기화 시 연동될 수 있다.
+  Future<void> setWalkieAllowed({
+    required String friendId,
+    required bool allowed,
+  });
+
   Future<void> block(String friendId);
 
   Future<void> unblock(String friendId);
@@ -203,12 +212,22 @@ class FakeFriendRepository implements FriendRepository {
 
   @override
   Future<void> syncPttAllow(String friendId, bool allow) async {
+    // 기존 API 호출은 그대로 유지하되,
+    // 상위에서 setWalkieAllowed를 통해 접근하는 것을 권장한다.
     final result = await _api.updateFriendPttAllow(friendId, allow);
     final error = result.error;
     if (error != null) {
       _logApiError('FriendRepository.syncPttAllow', error);
       _emitGenericError(_ref, code: error.code);
     }
+  }
+
+  @override
+  Future<void> setWalkieAllowed({
+    required String friendId,
+    required bool allowed,
+  }) async {
+    await syncPttAllow(friendId, allowed);
   }
 
   @override
@@ -348,12 +367,22 @@ class RealFriendRepository implements FriendRepository {
 
   @override
   Future<void> syncPttAllow(String friendId, bool allow) async {
+    // 기존 API 호출은 그대로 유지하되,
+    // 상위에서 setWalkieAllowed를 통해 접근하는 것을 권장한다.
     final result = await _api.updateFriendPttAllow(friendId, allow);
     final error = result.error;
     if (error != null) {
       _logApiError('RealFriendRepository.syncPttAllow', error);
       _emitGenericError(_ref, code: error.code);
     }
+  }
+
+  @override
+  Future<void> setWalkieAllowed({
+    required String friendId,
+    required bool allowed,
+  }) async {
+    await syncPttAllow(friendId, allowed);
   }
 
   @override

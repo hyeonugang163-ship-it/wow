@@ -61,7 +61,10 @@ class FriendPttAllowNotifier extends StateNotifier<Map<String, bool>> {
     }
     state = newState;
 
-    await _repository.syncPttAllow(friendId, allowed);
+    await _repository.setWalkieAllowed(
+      friendId: friendId,
+      allowed: allowed,
+    );
   }
 
   bool isAllowed(String friendId) {

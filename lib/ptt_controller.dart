@@ -15,6 +15,7 @@ import 'package:voyage/chat_voice_player.dart';
 import 'package:voyage/ptt_metrics.dart';
 import 'package:voyage/ptt_session_config.dart';
 import 'package:voyage/ptt_ui_event.dart';
+import 'package:voyage/ptt/ptt_mode_provider.dart';
 import 'package:voyage/voice_transport.dart';
 import 'package:voyage/voice_transport_factory.dart';
 
@@ -22,10 +23,6 @@ enum PttTalkState {
   idle,
   talking,
 }
-
-final pttModeProvider = StateProvider<PttMode>(
-  (ref) => PttMode.manner,
-);
 
 class PttSessionContext {
   const PttSessionContext({
@@ -102,22 +99,24 @@ class PttController {
       _localAudioInitialized = true;
     }
     await _localAudio.startRecording();
+    // 네트워크/즉시 재생 PTT는 Walkie 모드에서만 수행한다.
+    // Manner 모드에서는 로컬 녹음/음성 노트만 사용한다.
+    if (mode == PttMode.walkie) {
+      if (FF.androidInstantPlay &&
+          FF.enableAndroidPttForegroundService) {
+        // 플랫폼/정책에 따라 즉시 재생 모드를 선택적으로 처리.
+        await android_ptt.startPttService();
+      }
 
-    if (isWalkie &&
-        FF.androidInstantPlay &&
-        FF.enableAndroidPttForegroundService) {
-      // 플랫폼/정책에 따라 즉시 재생 모드를 선택적으로 처리.
-      await android_ptt.startPttService();
+      if (_isPublishing) {
+        return;
+      }
+
+      await _transport.warmUp();
+      await _transport.connect(url: 'noop', token: 'noop');
+      await _transport.startPublishing(Stream<List<int>>.empty());
+      _isPublishing = true;
     }
-
-    if (_isPublishing) {
-      return;
-    }
-
-    await _transport.warmUp();
-    await _transport.connect(url: 'noop', token: 'noop');
-    await _transport.startPublishing(Stream<List<int>>.empty());
-    _isPublishing = true;
   }
 
   /// 홀드-투-톡 종료.
@@ -278,17 +277,19 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
     final requestedMode = _ref.read(pttModeProvider);
     final targetFriendId = _ref.read(currentPttFriendIdProvider);
 
-    final pttAllowMap = _ref.read(friendPttAllowProvider);
-    var friendAllowed = false;
-    if (targetFriendId != null) {
-      friendAllowed = pttAllowMap[targetFriendId] ?? false;
+    if (targetFriendId == null) {
+      _ref.read(pttUiEventProvider.notifier).emit(
+            PttUiEvents.noFriendSelected(mode: requestedMode),
+          );
+      return;
     }
 
+    // targetFriendId는 위에서 null 가드 후 여기서는 항상 non-null이다.
+    final pttAllowMap = _ref.read(friendPttAllowProvider);
+    final friendAllowed = pttAllowMap[targetFriendId] ?? false;
+
     final blockMap = _ref.read(friendBlockProvider);
-    var friendBlocked = false;
-    if (targetFriendId != null) {
-      friendBlocked = blockMap[targetFriendId] ?? false;
-    }
+    final friendBlocked = blockMap[targetFriendId] ?? false;
 
     final DateTime startMark = uiHoldAt ?? DateTime.now();
     _lastUiHoldAt = startMark;
@@ -303,7 +304,7 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
         '[PTT][Policy]',
         'startTalk blocked by friendBlock',
         meta: <String, Object?>{
-          'friendId': targetFriendId ?? '(none)',
+          'friendId': targetFriendId,
         },
       );
       _ref.read(pttMetricsProvider.notifier).recordError(
@@ -330,7 +331,7 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
           meta: <String, Object?>{
             'sinceLastMs': sinceLastMs,
             'minIntervalMs': minIntervalMs,
-            'friendId': targetFriendId ?? '(none)',
+            'friendId': targetFriendId,
           },
         );
         _ref.read(pttMetricsProvider.notifier).recordError(
@@ -350,60 +351,62 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
       }
     }
 
-    if (targetFriendId != null) {
-      final windowSeconds = 60;
-      const softLimit = 20;
+    final windowSeconds = 60;
+    const softLimit = 20;
 
-      final previous = _friendPttStarts[targetFriendId] ?? <DateTime>[];
-      final recent = previous
-          .where(
-            (t) => now.difference(t).inSeconds < windowSeconds,
-          )
-          .toList();
-      recent.add(now);
-      _friendPttStarts[targetFriendId] = recent;
+    final previous = _friendPttStarts[targetFriendId] ?? <DateTime>[];
+    final recent = previous
+        .where(
+          (t) => now.difference(t).inSeconds < windowSeconds,
+        )
+        .toList();
+    recent.add(now);
+    _friendPttStarts[targetFriendId] = recent;
 
-      if (recent.length > softLimit) {
-        PttLogger.log(
-          '[PTT][RateLimit]',
-          'friend burst',
-          meta: <String, Object?>{
-            'friendId': targetFriendId,
-            'count': recent.length,
-            'windowSeconds': windowSeconds,
-          },
-        );
-        _ref.read(pttUiEventProvider.notifier).emit(
-              PttUiEvents.rateLimitSoft(
-                friendId: targetFriendId,
-                count: recent.length,
-                windowSeconds: windowSeconds,
-              ),
-            );
-        // TODO: hard block or soft warn on too many PTT in short time.
-      }
+    if (recent.length > softLimit) {
+      PttLogger.log(
+        '[PTT][RateLimit]',
+        'friend burst',
+        meta: <String, Object?>{
+          'friendId': targetFriendId,
+          'count': recent.length,
+          'windowSeconds': windowSeconds,
+        },
+      );
+      _ref.read(pttUiEventProvider.notifier).emit(
+            PttUiEvents.rateLimitSoft(
+              friendId: targetFriendId,
+              count: recent.length,
+              windowSeconds: windowSeconds,
+            ),
+          );
+      // TODO: hard block or soft warn on too many PTT in short time.
+    }
+
+    if (requestedMode == PttMode.manner) {
+      _ref.read(pttUiEventProvider.notifier).emit(
+            PttUiEvents.mannerModeNoInstantPtt(
+              friendId: targetFriendId,
+            ),
+          );
     }
 
     var effectiveMode = requestedMode;
     if (requestedMode == PttMode.walkie && !friendAllowed) {
       effectiveMode = PttMode.manner;
-      if (targetFriendId != null) {
-        _ref.read(pttUiEventProvider.notifier).emit(
-              PttUiEvents.friendNotAllowWalkie(
-                friendId: targetFriendId,
-              ),
-            );
-      }
+      _ref.read(pttUiEventProvider.notifier).emit(
+            PttUiEvents.friendNotAllowWalkie(
+              friendId: targetFriendId,
+            ),
+          );
     }
 
     String? targetFriendName;
-    if (targetFriendId != null) {
-      final friends = _ref.read(friendListProvider);
-      final matches =
-          friends.where((f) => f.id == targetFriendId);
-      if (matches.isNotEmpty) {
-        targetFriendName = matches.first.name;
-      }
+    final friends = _ref.read(friendListProvider);
+    final matches =
+        friends.where((f) => f.id == targetFriendId);
+    if (matches.isNotEmpty) {
+      targetFriendName = matches.first.name;
     }
 
     final requestedLabel =
@@ -418,7 +421,7 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
         'requestedMode': requestedLabel,
         'effectiveMode': effectiveLabel,
         'friendAllowed': friendAllowed,
-        'targetFriendId': targetFriendId ?? '(none)',
+        'targetFriendId': targetFriendId,
       },
     );
 
@@ -442,7 +445,7 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
         'success',
         meta: <String, Object?>{
           'mode': effectiveLabel,
-          'friendId': targetFriendId ?? '(none)',
+          'friendId': targetFriendId,
           'ttpMs': ttpMillis,
         },
       );
@@ -460,7 +463,7 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
         'error on startTalk',
         meta: <String, Object?>{
           'mode': effectiveLabel,
-          'friendId': targetFriendId ?? '(none)',
+          'friendId': targetFriendId,
           'error': e.toString(),
         },
       );

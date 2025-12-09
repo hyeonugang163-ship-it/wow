@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyage/app_env.dart';
 import 'package:voyage/app_router.dart';
-import 'package:voyage/debug/ptt_log_buffer.dart';
+import 'package:voyage/core/app_provider_observer.dart';
 import 'package:voyage/feature_flags.dart';
 import 'package:voyage/ptt_debug_log.dart';
 import 'package:voyage/ptt_lifecycle.dart';
@@ -15,7 +15,14 @@ void main() {
   FF.initForEnv();
   // iOS A안(APNs → 탭 → 포그라운드 → 재생) PTT Push 핸들러 초기화.
   PttPushHandler.init();
-  runApp(const ProviderScope(child: VoyageApp()));
+  runApp(
+    ProviderScope(
+      observers: const <ProviderObserver>[
+        AppProviderObserver(),
+      ],
+      child: const VoyageApp(),
+    ),
+  );
 }
 
 class VoyageApp extends ConsumerStatefulWidget {
@@ -49,10 +56,10 @@ class _VoyageAppState extends ConsumerState<VoyageApp> {
     }
     _loggerAttached = true;
 
-    // NOTE: PttDebugLog / PttLogBuffer 기반 sink 연결은
-    // Riverpod 초기화 타이밍과 충돌할 수 있어, 현재는 비활성화한다.
-    // 나중에 ProviderObserver 기반 로깅으로 리팩터링 예정.
-    PttLogger.attachSink((_) {});
+    // PttLogger의 sink를 v2 디버그 로그 버퍼에 연결한다.
+    // sink는 순수 Dart 버퍼에만 쓰기(write)하며,
+    // 어떤 provider state도 변경하지 않는다.
+    PttLogger.attachSink(pttDebugLogBufferV2.add);
 
     final uiEventNotifier = ref.read(pttUiEventProvider.notifier);
     PttUiEventBus.attach(uiEventNotifier.emit);

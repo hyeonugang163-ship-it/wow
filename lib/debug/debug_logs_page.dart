@@ -6,7 +6,7 @@ import 'package:voyage/auth/auth_state_notifier.dart';
 import 'package:voyage/debug/issue_report_builder.dart';
 import 'package:voyage/debug/ptt_log_buffer.dart';
 import 'package:voyage/feature_flags.dart';
-import 'package:voyage/ptt_controller.dart';
+import 'package:voyage/ptt/ptt_mode_provider.dart';
 
 class DebugLogsPage extends ConsumerStatefulWidget {
   const DebugLogsPage({super.key});
@@ -121,9 +121,7 @@ class _DebugLogsPageState extends ConsumerState<DebugLogsPage> {
             tooltip: '지우기',
             icon: const Icon(Icons.delete_outline),
             onPressed: () {
-              ref
-                  .read(pttLogBufferProvider.notifier)
-                  .clear();
+              clearPttLogBuffer();
             },
           ),
         ],

@@ -15,45 +15,43 @@ class PttLogEntry {
   final String message;
 }
 
-class PttLogBufferNotifier extends StateNotifier<List<PttLogEntry>> {
-  PttLogBufferNotifier({this.maxEntries = 500}) : super(const []);
-
-  final int maxEntries;
-
-  void add(PttLogEntry entry) {
-    final List<PttLogEntry> next = <PttLogEntry>[
-      ...state,
-      entry,
-    ];
-    if (next.length > maxEntries) {
-      state = next.sublist(next.length - maxEntries);
-    } else {
-      state = next;
-    }
-  }
-
-  void addFromDebugEntry(PttDebugLogEntry entry) {
-    // 현재는 별도의 레벨 정보를 쓰지 않으므로 "I"로 고정한다.
-    add(
-      PttLogEntry(
-        at: entry.at,
-        level: 'I',
-        tag: entry.tag,
-        // 메타데이터는 이미 PttLogger 수준에서 프라이버시를 고려한 값만 담고 있다.
-        message: entry.meta.isEmpty
-            ? entry.message
-            : '${entry.message} ${entry.meta.toString()}',
-      ),
-    );
-  }
-
-  void clear() {
-    state = const [];
-  }
+PttLogEntry _fromDebugEntry(PttDebugLogEntry entry) {
+  return PttLogEntry(
+    at: entry.at,
+    level: 'I',
+    tag: entry.tag,
+    // 메타데이터는 이미 PttLogger 수준에서 프라이버시를 고려한 값만 담고 있다.
+    message: entry.meta.isEmpty
+        ? entry.message
+        : '${entry.message} ${entry.meta.toString()}',
+  );
 }
 
-final pttLogBufferProvider =
-    StateNotifierProvider<PttLogBufferNotifier, List<PttLogEntry>>(
-  (ref) => PttLogBufferNotifier(),
-);
+List<PttLogEntry> _fromDebugEntries(
+  List<PttDebugLogEntry> entries,
+) {
+  return entries.map(_fromDebugEntry).toList();
+}
 
+/// v2 디버그 버퍼를 PttLogEntry 리스트로 노출하는 StreamProvider.
+final pttLogBufferStreamProvider =
+    StreamProvider<List<PttLogEntry>>((ref) {
+  return pttDebugLogBufferV2.stream.map(_fromDebugEntries);
+});
+
+/// 기존 pttLogBufferProvider 이름을 유지하면서,
+/// 최신 로그 스냅샷을 읽어오는 read-only Provider.
+final pttLogBufferProvider =
+    Provider<List<PttLogEntry>>((ref) {
+  final asyncLogs = ref.watch(pttLogBufferStreamProvider);
+  return asyncLogs.maybeWhen(
+    data: (value) => value,
+    orElse: () =>
+        _fromDebugEntries(pttDebugLogBufferV2.snapshot()),
+  );
+});
+
+/// 디버그 로그 버퍼와 PttLogger 내부 버퍼를 모두 비운다.
+void clearPttLogBuffer() {
+  PttLogger.clear();
+}
