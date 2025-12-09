@@ -184,9 +184,9 @@ class PttLogger {
       message: message,
       meta: meta,
     );
-    // provider state를 건드리지 않는 선에서,
-    // 콘솔 출력과 v2 버퍼 기록을 함께 수행한다.
-    _logToSink(entry);
+    // NOTE: ProviderObserver / backend provider 초기화 등에서
+    // 호출되므로, 여기서는 sink나 버퍼를 건드리지 않고
+    // 콘솔 출력만 수행한다.
     _logToConsole(entry);
   }
 }

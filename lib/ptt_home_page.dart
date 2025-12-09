@@ -209,7 +209,7 @@ class _PttHomePageState extends ConsumerState<PttHomePage> {
     String targetStatusText;
     if (currentFriend == null) {
       targetStatusText =
-          '현재 무전 대상이 없습니다. Friends 화면에서 친구를 길게 눌러 설정하세요.';
+          '현재 무전 대상이 없습니다. Friends 화면에서 친구를 선택해 주세요.';
     } else if (friendBlocked) {
       targetStatusText =
           '현재 대상: ${currentFriend.name} (차단됨: 무전/매너 모두 전송되지 않습니다.)';
@@ -279,6 +279,37 @@ class _PttHomePageState extends ConsumerState<PttHomePage> {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text('모드'),
+                    const SizedBox(width: 12),
+                    ChoiceChip(
+                      label: const Text('무전모드'),
+                      selected: mode == PttMode.walkie,
+                      onSelected: (_) {
+                        ref
+                            .read(
+                              pttModeProvider.notifier,
+                            )
+                            .setMode(PttMode.walkie);
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      label: const Text('매너모드'),
+                      selected: mode == PttMode.manner,
+                      onSelected: (_) {
+                        ref
+                            .read(
+                              pttModeProvider.notifier,
+                            )
+                            .setMode(PttMode.manner);
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
             Align(
               alignment: Alignment.center,
               child: InkWell(

@@ -14,8 +14,6 @@ class FriendsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final friends = ref.watch(friendListProvider);
-    final pttAllowMap = ref.watch(friendPttAllowProvider);
-    final blockMap = ref.watch(friendBlockProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -29,81 +27,12 @@ class FriendsPage extends ConsumerWidget {
               itemCount: friends.length,
               itemBuilder: (context, index) {
                 final friend = friends[index];
-                final isAllowed = pttAllowMap[friend.id] ?? false;
-                final isBlocked = blockMap[friend.id] ?? false;
 
                 return ListTile(
                   title: Text(friend.name),
                   subtitle:
                       friend.status != null ? Text(friend.status!) : null,
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Switch(
-                        value: isAllowed,
-                        onChanged: (value) {
-                          if (isBlocked) {
-                            // Blocked friends cannot be toggled for PTT allow.
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  '"${friend.name}"은(는) 차단되어 있어 무전 허용을 변경할 수 없습니다.',
-                                ),
-                                duration: const Duration(seconds: 2),
-                              ),
-                            );
-                            return;
-                          }
-                          ref
-                              .read(friendPttAllowProvider.notifier)
-                              .setAllowed(friend.id, value);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                value
-                                    ? '"${friend.name}"에게 무전을 허용했습니다.'
-                                    : '"${friend.name}"에 대한 무전 허용을 해제했습니다.',
-                              ),
-                              duration: const Duration(seconds: 2),
-                            ),
-                          );
-                        },
-                      ),
-                      IconButton(
-                        icon: Icon(
-                          isBlocked ? Icons.block : Icons.block_outlined,
-                          color:
-                              isBlocked ? Colors.redAccent : null,
-                        ),
-                        tooltip:
-                            isBlocked ? '차단 해제' : '차단',
-                        onPressed: () {
-                          final next = !isBlocked;
-                          ref
-                              .read(friendBlockProvider.notifier)
-                              .setBlocked(friend.id, next);
-                          if (next) {
-                            // 차단 시에는 무전 허용도 함께 해제.
-                            ref
-                                .read(
-                                  friendPttAllowProvider.notifier,
-                                )
-                                .setAllowed(friend.id, false);
-                          }
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                next
-                                    ? '"${friend.name}"님을 차단했습니다.'
-                                    : '"${friend.name}"님 차단을 해제했습니다.',
-                              ),
-                              duration:
-                                  const Duration(seconds: 2),
-                            ),
-                          );
-                        },
-                      ),
-                      IconButton(
+                  trailing: IconButton(
                         icon: const Icon(Icons.more_vert),
                         tooltip: '친구 설정',
                         onPressed: () {
@@ -265,23 +194,11 @@ class FriendsPage extends ConsumerWidget {
                           );
                         },
                       ),
-                    ],
-                  ),
                   onTap: () {
-                    context.push('/chat/${friend.id}');
-                  },
-                  onLongPress: () {
                     ref
                         .read(currentPttFriendIdProvider.notifier)
                         .state = friend.id;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          '"${friend.name}"님이 현재 무전 대상입니다.',
-                        ),
-                        duration: const Duration(seconds: 2),
-                      ),
-                    );
+                    context.push('/chat/${friend.id}');
                   },
                 );
               },
