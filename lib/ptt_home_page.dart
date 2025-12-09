@@ -17,6 +17,7 @@ import 'package:voyage/friend_state.dart';
 import 'package:voyage/ptt_controller.dart';
 import 'package:voyage/ptt_debug_overlay.dart';
 import 'package:voyage/ptt_strings.dart';
+import 'package:voyage/ptt/ptt_user_prefs.dart';
 import 'package:voyage/ptt_ui_event.dart';
 import 'package:voyage/ptt/ptt_mode_provider.dart';
 
@@ -59,8 +60,17 @@ class _PttHomePageState extends ConsumerState<PttHomePage> {
     final pttAllowMap = ref.read(friendPttAllowProvider);
     final friendAllowed = pttAllowMap[currentFriendId] ?? false;
 
+    final beepOnStart = ref.read(pttBeepOnStartProvider);
+    final vibrateInWalkie =
+        ref.read(pttVibrateInWalkieProvider);
+
     if (mode == PttMode.walkie && friendAllowed) {
-      await SystemSound.play(SystemSoundType.alert);
+      if (beepOnStart) {
+        await SystemSound.play(SystemSoundType.alert);
+      }
+      if (vibrateInWalkie) {
+        await HapticFeedback.mediumImpact();
+      }
     }
 
     await ref
@@ -73,7 +83,11 @@ class _PttHomePageState extends ConsumerState<PttHomePage> {
     final mode = ref.read(pttModeProvider);
     final currentFriendId = ref.read(currentPttFriendIdProvider);
 
-    if (mode == PttMode.walkie && currentFriendId != null) {
+    final beepOnEnd = ref.read(pttBeepOnEndProvider);
+
+    if (mode == PttMode.walkie &&
+        currentFriendId != null &&
+        beepOnEnd) {
       await SystemSound.play(SystemSoundType.alert);
     }
 

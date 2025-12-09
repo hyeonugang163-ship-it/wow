@@ -4,20 +4,17 @@ import 'package:go_router/go_router.dart';
 import 'package:voyage/app_env.dart';
 import 'package:voyage/auth/auth_state_notifier.dart';
 import 'package:voyage/feature_flags.dart';
+import 'package:voyage/ptt/ptt_user_prefs.dart';
 import 'package:voyage/ptt/ptt_mode_provider.dart';
-
-final _beepOnStartProvider = StateProvider<bool>((ref) => false);
-final _beepOnEndProvider = StateProvider<bool>((ref) => false);
-final _vibrateInWalkieProvider = StateProvider<bool>((ref) => false);
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final beepOnStart = ref.watch(_beepOnStartProvider);
-    final beepOnEnd = ref.watch(_beepOnEndProvider);
-    final vibrateInWalkie = ref.watch(_vibrateInWalkieProvider);
+    final beepOnStart = ref.watch(pttBeepOnStartProvider);
+    final beepOnEnd = ref.watch(pttBeepOnEndProvider);
+    final vibrateInWalkie = ref.watch(pttVibrateInWalkieProvider);
     final mode = ref.watch(pttModeProvider);
     final env = AppEnv.current;
 
@@ -178,14 +175,15 @@ class SettingsPage extends ConsumerWidget {
                   children: [
                     const ListTile(
                       title: Text(
-                        '실험적 옵션 (아직 실제 동작 없음)',
+                        '실험적 옵션 (일부 동작)',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       subtitle: Text(
-                        '향후 PTT UX를 튜닝할 때 사용할 수 있는 옵션들입니다. 현재는 UI에서만 on/off가 바뀌고 실제 PTT 로직에는 영향을 주지 않습니다.',
+                        '향후 PTT UX를 튜닝할 때 사용할 수 있는 옵션들입니다. '
+                        '비프음/진동 설정은 무전 버튼 동작에 바로 반영됩니다.',
                       ),
                     ),
                     const Divider(height: 1),
@@ -193,15 +191,18 @@ class SettingsPage extends ConsumerWidget {
                       title: const Text('PTT 시작 전 짧은 비프음 재생'),
                       value: beepOnStart,
                       onChanged: (value) {
-                        ref.read(_beepOnStartProvider.notifier).state =
-                            value;
+                        ref
+                            .read(pttBeepOnStartProvider.notifier)
+                            .state = value;
                       },
                     ),
                     SwitchListTile(
                       title: const Text('PTT 종료 후 짧은 비프음 재생'),
                       value: beepOnEnd,
                       onChanged: (value) {
-                        ref.read(_beepOnEndProvider.notifier).state = value;
+                        ref
+                            .read(pttBeepOnEndProvider.notifier)
+                            .state = value;
                       },
                     ),
                     SwitchListTile(
@@ -209,7 +210,9 @@ class SettingsPage extends ConsumerWidget {
                       value: vibrateInWalkie,
                       onChanged: (value) {
                         ref
-                            .read(_vibrateInWalkieProvider.notifier)
+                            .read(
+                              pttVibrateInWalkieProvider.notifier,
+                            )
                             .state = value;
                       },
                     ),
