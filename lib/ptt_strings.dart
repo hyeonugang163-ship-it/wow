@@ -1,6 +1,6 @@
 class PttStrings {
   static const String holdTooShort =
-      '무전은 버튼을 1초 이상 꾹 누르고 말해 주세요.';
+      '그냥 버튼을 조금 더 길게 꾹 눌러 주세요.';
 
   static const String cooldownBlocked =
       '너무 빠르게 연속으로 무전할 수 없습니다.';

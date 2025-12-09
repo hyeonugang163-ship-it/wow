@@ -96,108 +96,130 @@ class _DebugLogsPageState extends ConsumerState<DebugLogsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final logs = ref.watch(pttLogBufferProvider);
-    final filtered = _applyFilters(logs);
+    final logsAsync = ref.watch(pttLogBufferStreamProvider);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('디버그 로그'),
-        actions: [
-          IconButton(
-            tooltip: '버그 리포트 복사',
-            icon: const Icon(Icons.description_outlined),
-            onPressed: filtered.isEmpty
-                ? null
-                : () => _copyIssueReport(logs),
+    return logsAsync.when(
+      data: (logs) {
+        final filtered = _applyFilters(logs);
+
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('디버그 로그'),
+            actions: [
+              IconButton(
+                tooltip: '버그 리포트 복사',
+                icon: const Icon(Icons.description_outlined),
+                onPressed: filtered.isEmpty
+                    ? null
+                    : () => _copyIssueReport(logs),
+              ),
+              IconButton(
+                tooltip: '로그 복사',
+                icon: const Icon(Icons.copy),
+                onPressed: filtered.isEmpty
+                    ? null
+                    : () => _copyLogs(filtered),
+              ),
+              IconButton(
+                tooltip: '지우기',
+                icon: const Icon(Icons.delete_outline),
+                onPressed: () {
+                  clearPttLogBuffer();
+                },
+              ),
+            ],
           ),
-          IconButton(
-            tooltip: '로그 복사',
-            icon: const Icon(Icons.copy),
-            onPressed: filtered.isEmpty
-                ? null
-                : () => _copyLogs(filtered),
-          ),
-          IconButton(
-            tooltip: '지우기',
-            icon: const Icon(Icons.delete_outline),
-            onPressed: () {
-              clearPttLogBuffer();
-            },
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(
-              children: [
-                DropdownButton<String>(
-                  value: _levelFilter,
-                  onChanged: (value) {
-                    if (value == null) return;
-                    setState(() {
-                      _levelFilter = value;
-                    });
-                  },
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'all',
-                      child: Text('모든 로그'),
+          body: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                child: Row(
+                  children: [
+                    DropdownButton<String>(
+                      value: _levelFilter,
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() {
+                          _levelFilter = value;
+                        });
+                      },
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'all',
+                          child: Text('모든 로그'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'we',
+                          child: Text('경고/에러만'),
+                        ),
+                      ],
                     ),
-                    DropdownMenuItem(
-                      value: 'we',
-                      child: Text('경고/에러만'),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: _tagController,
+                        decoration: const InputDecoration(
+                          labelText: '태그 필터 (예: PTT, Backend)',
+                          isDense: true,
+                        ),
+                        onChanged: (value) {
+                          setState(() {
+                            _tagFilter = value;
+                          });
+                        },
+                      ),
                     ),
                   ],
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _tagController,
-                    decoration: const InputDecoration(
-                      labelText: '태그 필터 (예: PTT, Backend)',
-                      isDense: true,
-                    ),
-                    onChanged: (value) {
-                      setState(() {
-                        _tagFilter = value;
-                      });
-                    },
-                  ),
-                ),
-              ],
-            ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: filtered.isEmpty
+                    ? const Center(
+                        child: Text('아직 수집된 로그가 없습니다.'),
+                      )
+                    : ListView.builder(
+                        itemCount: filtered.length,
+                        itemBuilder: (context, index) {
+                          final entry = filtered[index];
+                          final text = _formatEntry(entry);
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 4,
+                            ),
+                            child: Text(
+                              text,
+                              style: const TextStyle(
+                                fontFamily: 'monospace',
+                                fontSize: 12,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
           ),
-          const Divider(height: 1),
-          Expanded(
-            child: filtered.isEmpty
-                ? const Center(
-                    child: Text('표시할 로그가 없습니다.'),
-                  )
-                : ListView.builder(
-                    itemCount: filtered.length,
-                    itemBuilder: (context, index) {
-                      final entry = filtered[index];
-                      final text = _formatEntry(entry);
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 4,
-                        ),
-                        child: Text(
-                          text,
-                          style: const TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 12,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+        );
+      },
+      loading: () => const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      ),
+      error: (error, stackTrace) => Scaffold(
+        appBar: AppBar(
+          title: const Text('디버그 로그'),
+        ),
+        body: const Center(
+          child: Text(
+            '로그를 불러오는 중 문제가 발생했습니다.',
           ),
-        ],
+        ),
       ),
     );
   }

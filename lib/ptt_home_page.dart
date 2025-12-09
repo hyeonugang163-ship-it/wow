@@ -24,7 +24,7 @@ import 'package:voyage/ptt/ptt_mode_provider.dart';
 ///
 /// TODO: move to PolicyConfig / FeatureFlags if we need
 /// platform- or market-specific tuning.
-const Duration kPttMinHoldDuration = Duration(milliseconds: 200);
+const Duration kPttMinHoldDuration = Duration(milliseconds: 500);
 
 class PttHomePage extends ConsumerStatefulWidget {
   const PttHomePage({super.key});
@@ -60,7 +60,7 @@ class _PttHomePageState extends ConsumerState<PttHomePage> {
     final friendAllowed = pttAllowMap[currentFriendId] ?? false;
 
     if (mode == PttMode.walkie && friendAllowed) {
-      await SystemSound.play(SystemSoundType.click);
+      await SystemSound.play(SystemSoundType.alert);
     }
 
     await ref
@@ -74,7 +74,7 @@ class _PttHomePageState extends ConsumerState<PttHomePage> {
     final currentFriendId = ref.read(currentPttFriendIdProvider);
 
     if (mode == PttMode.walkie && currentFriendId != null) {
-      await SystemSound.play(SystemSoundType.click);
+      await SystemSound.play(SystemSoundType.alert);
     }
 
     await ref.read(pttControllerProvider.notifier).stopTalk();
@@ -374,7 +374,7 @@ class _PttHomePageState extends ConsumerState<PttHomePage> {
                                   ? '차단됨'
                                   : isTalking
                                       ? 'Talking…'
-                                      : 'Hold to Talk',
+                                      : '꾹 누르고 말하기',
                           style: Theme.of(context)
                               .textTheme
                               .titleMedium
