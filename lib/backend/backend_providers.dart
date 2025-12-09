@@ -46,7 +46,9 @@ final pttMediaApiProvider = Provider<PttMediaApi>(
 final authRepositoryProvider = Provider<AuthRepository>(
   (ref) {
     final useFake = FF.useFakeBackend;
-    PttLogger.log(
+    // NOTE: provider 초기화 시점에는 다른 provider state를
+    // 수정할 수 없으므로, 디버그 로그는 콘솔 출력만 남긴다.
+    PttLogger.logConsoleOnly(
       '[Backend][Repository]',
       'create AuthRepository',
       meta: <String, Object?>{'useFakeBackend': useFake},
@@ -62,7 +64,7 @@ final authRepositoryProvider = Provider<AuthRepository>(
 final friendRepositoryProvider = Provider<FriendRepository>(
   (ref) {
     final useFake = FF.useFakeBackend;
-    PttLogger.log(
+    PttLogger.logConsoleOnly(
       '[Backend][Repository]',
       'create FriendRepository',
       meta: <String, Object?>{'useFakeBackend': useFake},
@@ -78,7 +80,7 @@ final friendRepositoryProvider = Provider<FriendRepository>(
 final chatRepositoryProvider = Provider<ChatRepository>(
   (ref) {
     final useFake = FF.useFakeBackend;
-    PttLogger.log(
+    PttLogger.logConsoleOnly(
       '[Backend][Repository]',
       'create ChatRepository',
       meta: <String, Object?>{'useFakeBackend': useFake},
@@ -94,7 +96,7 @@ final chatRepositoryProvider = Provider<ChatRepository>(
 final pttMediaRepositoryProvider = Provider<PttMediaRepository>(
   (ref) {
     final useFake = FF.useFakeBackend;
-    PttLogger.log(
+    PttLogger.logConsoleOnly(
       '[Backend][Repository]',
       'create PttMediaRepository',
       meta: <String, Object?>{'useFakeBackend': useFake},
