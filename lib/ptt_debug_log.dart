@@ -21,15 +21,9 @@ class PttDebugLogNotifier extends StateNotifier<List<PttDebugLogEntry>> {
   final int maxEntries;
 
   void add(PttDebugLogEntry entry) {
-    final List<PttDebugLogEntry> next = <PttDebugLogEntry>[
-      ...state,
-      entry,
-    ];
-    if (next.length > maxEntries) {
-      state = next.sublist(next.length - maxEntries);
-    } else {
-      state = next;
-    }
+    // TODO: Riverpod 초기화 중 provider 변경 이슈 때문에,
+    // 디버그 로그 provider는 임시로 no-op 처리한다.
+    // 나중에 ProviderObserver/별도 로그 버퍼를 사용하는 방식으로 리팩터링 예정.
   }
 
   void clear() {

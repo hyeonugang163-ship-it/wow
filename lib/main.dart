@@ -49,20 +49,16 @@ class _VoyageAppState extends ConsumerState<VoyageApp> {
     }
     _loggerAttached = true;
 
-    final debugLogNotifier = ref.read(pttDebugLogProvider.notifier);
-    final logBufferNotifier =
-        ref.read(pttLogBufferProvider.notifier);
-    PttLogger.attachSink((entry) {
-      debugLogNotifier.add(entry);
-      logBufferNotifier.addFromDebugEntry(entry);
-    });
+    // NOTE: PttDebugLog / PttLogBuffer 기반 sink 연결은
+    // Riverpod 초기화 타이밍과 충돌할 수 있어, 현재는 비활성화한다.
+    // 나중에 ProviderObserver 기반 로깅으로 리팩터링 예정.
+    PttLogger.attachSink((_) {});
 
     final uiEventNotifier = ref.read(pttUiEventProvider.notifier);
     PttUiEventBus.attach(uiEventNotifier.emit);
 
     final env = AppEnv.current;
-    // 앱 시작 시점 로그는 provider state를 건드리지 않고
-    // 콘솔에만 남긴다.
+    // 앱 시작 시점 로그는 콘솔에만 남긴다.
     PttLogger.logConsoleOnly(
       '[App]',
       'starting',

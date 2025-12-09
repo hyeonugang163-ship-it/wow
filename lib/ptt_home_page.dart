@@ -38,28 +38,6 @@ class _PttHomePageState extends ConsumerState<PttHomePage> {
   Timer? _holdTimer;
   bool _showDebugOverlay = false;
 
-  @override
-  void initState() {
-    super.initState();
-
-    ref.listen<PttUiEvent?>(
-      pttUiEventProvider,
-      (prev, next) {
-        if (!mounted || next == null) {
-          return;
-        }
-        final message = PttUiMessages.messageForType(next.messageKey);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(message),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-        ref.read(pttUiEventProvider.notifier).clear();
-      },
-    );
-  }
-
   Future<void> _handlePressStart(
     BuildContext context,
     DateTime holdTriggeredAt,
@@ -170,6 +148,27 @@ class _PttHomePageState extends ConsumerState<PttHomePage> {
   @override
   Widget build(BuildContext context) {
     final ref = this.ref;
+
+    // NOTE: ref.listen은 ConsumerState.build 안에서만 사용한다.
+    // PTT UI 이벤트(PttUiEvent)를 감지해 SnackBar를 노출하고,
+    // 처리 후에는 이벤트를 즉시 clear한다.
+    ref.listen<PttUiEvent?>(
+      pttUiEventProvider,
+      (prev, next) {
+        if (!mounted || next == null) {
+          return;
+        }
+        final message = PttUiMessages.messageForType(next.messageKey);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+        ref.read(pttUiEventProvider.notifier).clear();
+      },
+    );
+
     final authState = ref.watch(authStateNotifierProvider);
 
     if (authState.status == AuthStatus.unknown &&
