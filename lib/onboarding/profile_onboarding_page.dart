@@ -61,97 +61,121 @@ class _ProfileOnboardingPageState
         title: const Text('프로필 설정'),
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'MJTalk에 오신 것을 환영합니다',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final bottomInset =
+                MediaQuery.of(context).viewInsets.bottom;
+            return SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                16,
+                16,
+                16,
+                16 + bottomInset,
+              ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight -
+                      bottomInset,
                 ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                '친구랑 즉시 말 걸 수 있는 무전 메신저입니다.\n'
-                '먼저 닉네임과 아바타를 정해 주세요.',
-              ),
-              const SizedBox(height: 24),
-              TextField(
-                controller: _nameController,
-                maxLength: 20,
-                decoration: const InputDecoration(
-                  labelText: '닉네임',
-                  hintText: '예: MJ, 라디오맨',
-                  border: OutlineInputBorder(),
-                ),
-                onChanged: (_) => setState(() {}),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                '아바타 이모지 선택',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                children: emojis
-                    .map(
-                      (e) => ChoiceChip(
-                        label: Text(e),
-                        selected: _selectedEmoji == e,
-                        onSelected: (selected) {
-                          if (!selected) return;
-                          setState(() {
-                            _selectedEmoji = e;
-                          });
-                        },
+                child: IntrinsicHeight(
+                  child: Column(
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'MJTalk에 오신 것을 환영합니다',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    )
-                    .toList(),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Checkbox(
-                    value: _agreed,
-                    onChanged: (value) {
-                      setState(() {
-                        _agreed = value ?? false;
-                      });
-                    },
-                  ),
-                  const Expanded(
-                    child: Text(
-                      '무전 기록/메시지는 설계도 v1.1에서 정의한 '
-                      '프라이버시 정책에 따라 처리됩니다.',
-                    ),
-                  ),
-                ],
-              ),
-              const Spacer(),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: canSubmit ? _submit : null,
-                  child: isLoading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
+                      const SizedBox(height: 8),
+                      const Text(
+                        '친구랑 즉시 말 걸 수 있는 무전 메신저입니다.\n'
+                        '먼저 닉네임과 아바타를 정해 주세요.',
+                      ),
+                      const SizedBox(height: 24),
+                      TextField(
+                        controller: _nameController,
+                        maxLength: 20,
+                        decoration: const InputDecoration(
+                          labelText: '닉네임',
+                          hintText: '예: MJ, 라디오맨',
+                          border: OutlineInputBorder(),
+                        ),
+                        onChanged: (_) => setState(() {}),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        '아바타 이모지 선택',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        children: emojis
+                            .map(
+                              (e) => ChoiceChip(
+                                label: Text(e),
+                                selected:
+                                    _selectedEmoji == e,
+                                onSelected: (selected) {
+                                  if (!selected) return;
+                                  setState(() {
+                                    _selectedEmoji = e;
+                                  });
+                                },
+                              ),
+                            )
+                            .toList(),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Checkbox(
+                            value: _agreed,
+                            onChanged: (value) {
+                              setState(() {
+                                _agreed = value ?? false;
+                              });
+                            },
                           ),
-                        )
-                      : const Text('시작하기'),
+                          const Expanded(
+                            child: Text(
+                              '무전 기록/메시지는 설계도 v1.1에서 정의한 '
+                              '프라이버시 정책에 따라 처리됩니다.',
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Spacer(),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          onPressed:
+                              canSubmit ? _submit : null,
+                          child: isLoading
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child:
+                                      CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Text('시작하기'),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
   }
 }
-
