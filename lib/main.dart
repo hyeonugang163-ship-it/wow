@@ -1,23 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:voyage/app_env.dart';
 import 'package:voyage/app_router.dart';
 import 'package:voyage/core/app_provider_observer.dart';
 import 'package:voyage/core/theme/app_theme.dart';
 import 'package:voyage/feature_flags.dart';
+import 'package:voyage/ptt/ptt_prefs.dart';
 import 'package:voyage/ptt_debug_log.dart';
 import 'package:voyage/ptt_lifecycle.dart';
 import 'package:voyage/ptt_push_handler.dart';
 import 'package:voyage/ptt_ui_event.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // env별 기본 PolicyConfig 초기화.
+  final sharedPrefs = await SharedPreferences.getInstance();
   FF.initForEnv();
-  // iOS A안(APNs → 탭 → 포그라운드 → 재생) PTT Push 핸들러 초기화.
   PttPushHandler.init();
   runApp(
     ProviderScope(
+      overrides: <Override>[
+        sharedPrefsProvider.overrideWithValue(sharedPrefs),
+      ],
       observers: const <ProviderObserver>[
         AppProviderObserver(),
       ],

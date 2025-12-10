@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyage/backend/backend_providers.dart';
 import 'package:voyage/backend/repositories.dart';
 import 'package:voyage/friend.dart';
+import 'package:voyage/ptt/ptt_prefs.dart';
 import 'package:voyage/ptt_debug_log.dart';
 
 class FriendListNotifier extends StateNotifier<List<Friend>> {
@@ -47,10 +48,13 @@ final currentPttFriendIdProvider = StateProvider<String?>(
   (ref) => null,
 );
 
-class FriendPttAllowNotifier extends StateNotifier<Map<String, bool>> {
-  FriendPttAllowNotifier(this._repository) : super(const {});
+class FriendPttAllowNotifier
+    extends StateNotifier<Map<String, bool>> {
+  FriendPttAllowNotifier(this._repository, this._prefs)
+      : super(_prefs.loadFriendAllowMap());
 
   final FriendRepository _repository;
+  final PttPrefs _prefs;
 
   Future<void> setAllowed(String friendId, bool allowed) async {
     final newState = Map<String, bool>.from(state);
@@ -60,6 +64,8 @@ class FriendPttAllowNotifier extends StateNotifier<Map<String, bool>> {
       newState.remove(friendId);
     }
     state = newState;
+
+    await _prefs.saveFriendAllowMap(state);
 
     await _repository.setWalkieAllowed(
       friendId: friendId,
@@ -76,14 +82,18 @@ final friendPttAllowProvider =
     StateNotifierProvider<FriendPttAllowNotifier, Map<String, bool>>(
   (ref) {
     final repository = ref.read(friendRepositoryProvider);
-    return FriendPttAllowNotifier(repository);
+    final prefs = ref.read(pttPrefsProvider);
+    return FriendPttAllowNotifier(repository, prefs);
   },
 );
 
-class FriendBlockNotifier extends StateNotifier<Map<String, bool>> {
-  FriendBlockNotifier(this._repository) : super(const {});
+class FriendBlockNotifier
+    extends StateNotifier<Map<String, bool>> {
+  FriendBlockNotifier(this._repository, this._prefs)
+      : super(_prefs.loadFriendBlockMap());
 
   final FriendRepository _repository;
+  final PttPrefs _prefs;
 
   Future<void> setBlocked(String friendId, bool blocked) async {
     final next = Map<String, bool>.from(state);
@@ -93,6 +103,8 @@ class FriendBlockNotifier extends StateNotifier<Map<String, bool>> {
       next.remove(friendId);
     }
     state = next;
+
+    await _prefs.saveFriendBlockMap(state);
 
     if (blocked) {
       await _repository.block(friendId);
@@ -110,7 +122,8 @@ final friendBlockProvider =
     StateNotifierProvider<FriendBlockNotifier, Map<String, bool>>(
   (ref) {
     final repository = ref.read(friendRepositoryProvider);
-    return FriendBlockNotifier(repository);
+    final prefs = ref.read(pttPrefsProvider);
+    return FriendBlockNotifier(repository, prefs);
   },
 );
 

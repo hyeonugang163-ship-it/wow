@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "179812810796",
+    "project_id": "mjtalk-alpha",
+    "storage_bucket": "mjtalk-alpha.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:179812810796:android:90bfb661aef5dc1ba35189",
+        "android_client_info": {
+          "package_name": "com.example.voyage"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBzm3Y3sUGLGmvO-D5syFn1a86xfBC12VI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

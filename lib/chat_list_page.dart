@@ -30,6 +30,15 @@ class ChatListPage extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('채팅'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.mic_none_outlined),
+            tooltip: '무전 홈',
+            onPressed: () {
+              context.push('/ptt');
+            },
+          ),
+        ],
       ),
       body: entries.isEmpty
           ? const Center(
