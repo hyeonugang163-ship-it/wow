@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyage/auth/auth_state.dart';
 import 'package:voyage/backend/backend_providers.dart';
 import 'package:voyage/backend/repositories.dart';
+import 'package:voyage/ptt/ptt_prefs.dart';
 import 'package:voyage/ptt_debug_log.dart';
 import 'package:voyage/ptt_ui_event.dart';
 
@@ -79,6 +80,14 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
       final next =
           await _repository.completeOnboarding(displayName, avatarEmoji);
       state = next;
+      final prefs = _ref.read(pttPrefsProvider);
+      final userId = next.user?.id ?? 'user_local';
+      await prefs.saveUserProfile(
+        userId: userId,
+        displayName: displayName,
+        avatarEmoji: avatarEmoji,
+      );
+      await prefs.saveOnboardingCompleted(true);
     } catch (e) {
       PttLogger.log(
         '[Auth]',
@@ -108,6 +117,12 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
           'error': e.toString(),
         },
       );
+    }
+    try {
+      final prefs = _ref.read(pttPrefsProvider);
+      await prefs.saveOnboardingCompleted(false);
+    } catch (_) {
+      // ignore prefs errors on sign-out
     }
     state = const AuthState(
       status: AuthStatus.onboarding,

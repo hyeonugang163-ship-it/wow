@@ -1,4 +1,6 @@
+import 'package:voyage/app_env.dart';
 import 'package:voyage/feature_flags.dart';
+import 'package:voyage/ptt/livekit_config.dart';
 
 /// PTT 세션/룸/토큰 구성을 표현하는 모델.
 ///
@@ -35,25 +37,26 @@ class PttSessionConfig {
 
   /// Placeholder 세션 구성을 생성한다.
   ///
-  /// - serverUrl: "https://example.livekit.server" (TODO)
-  /// - token: "TODO_TOKEN" (서버에서 JWT/AccessToken 받아오는 것으로 교체 필요)
+  /// - serverUrl / token 은 LiveKitConfig.forEnv(AppEnv.current)에서 가져온다.
+  ///   (실제 서버/토큰 값은 추후 설정으로 대체 필요)
   static PttSessionConfig placeholder({
     required String localUserId,
     required String remoteUserId,
     required PttMode mode,
   }) {
+    final LiveKitConfig livekit =
+        LiveKitConfig.forEnv(AppEnv.current);
     final room = roomNameForPair(
       localUserId: localUserId,
       remoteUserId: remoteUserId,
     );
     return PttSessionConfig(
-      serverUrl: Uri.parse('https://example.livekit.server'),
+      serverUrl: livekit.serverUrl,
       roomName: room,
-      token: 'TODO_TOKEN',
+      token: livekit.token,
       localUserId: localUserId,
       remoteUserId: remoteUserId,
       mode: mode,
     );
   }
 }
-

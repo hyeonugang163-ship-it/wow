@@ -171,7 +171,7 @@ class FF {
           callKitVoip: false,
           forceTurnTcpTls443: false,
           pttMinIntervalMillis: 300,
-          useFakeVoiceTransport: true,
+          useFakeVoiceTransport: false,
           useFakeBackend: true,
         );
         break;

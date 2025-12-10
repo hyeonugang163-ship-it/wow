@@ -8,6 +8,7 @@ import 'package:voyage/auth/app_user.dart';
 import 'package:voyage/auth/auth_state.dart';
 import 'package:voyage/chat_message.dart';
 import 'package:voyage/friend.dart';
+import 'package:voyage/ptt/ptt_prefs.dart';
 import 'package:voyage/ptt_debug_log.dart';
 import 'package:voyage/ptt_ui_event.dart';
 
@@ -91,6 +92,9 @@ class FakeAuthRepository implements AuthRepository {
 
   @override
   Future<AuthState> loadInitialAuthState() async {
+    final prefs = _ref.read(pttPrefsProvider);
+    final bool onboardingCompleted =
+        prefs.loadOnboardingCompleted();
     final existing = _cachedUser;
     if (existing != null) {
       PttLogger.log(
@@ -107,14 +111,42 @@ class FakeAuthRepository implements AuthRepository {
       );
     }
 
+    if (onboardingCompleted) {
+      final userId =
+          prefs.loadUserId() ?? 'user_local';
+      final displayName =
+          prefs.loadDisplayName() ?? 'User';
+      final avatarEmoji =
+          prefs.loadAvatarEmoji() ?? '😄';
+
+      final user = AppUser(
+        id: userId,
+        displayName: displayName,
+        avatarEmoji: avatarEmoji,
+        createdAt: DateTime.now(),
+      );
+      _cachedUser = user;
+
+      PttLogger.log(
+        '[Auth]',
+        'loadInitialAuthState from prefs (onboardingCompleted=true)',
+        meta: <String, Object?>{
+          'userId': userId,
+        },
+      );
+
+      return AuthState(
+        status: AuthStatus.signedIn,
+        user: user,
+        isLoading: false,
+      );
+    }
+
     PttLogger.log(
       '[Auth]',
       'loadInitialAuthState no user, onboarding',
     );
 
-    // NOTE: 현재는 프로세스 내 메모리만 사용한다.
-    // 앱 재시작 후에도 상태를 유지하려면 SharedPreferences 등
-    // 로컬 스토리지를 연동해야 한다.
     return const AuthState(
       status: AuthStatus.onboarding,
       user: null,

@@ -9,9 +9,14 @@ class PttPrefs {
 
   final SharedPreferences _prefs;
 
-  static const String _modeKey = 'ptt.mode';
-  static const String _friendAllowKey = 'ptt.friendAllow';
-  static const String _friendBlockKey = 'ptt.friendBlock';
+  static const String _modeKey = 'ptt.globalMode';
+  static const String _friendAllowKey = 'ptt.friendAllowMap';
+  static const String _friendBlockKey = 'ptt.friendBlockMap';
+  static const String _onboardingCompletedKey =
+      'ptt.onboardingCompleted';
+  static const String _userIdKey = 'ptt.userId';
+  static const String _displayNameKey = 'ptt.displayName';
+  static const String _avatarEmojiKey = 'ptt.avatarEmoji';
 
   PttMode loadMode() {
     final value = _prefs.getString(_modeKey);
@@ -64,6 +69,36 @@ class PttPrefs {
     final jsonString = jsonEncode(map);
     return _prefs.setString(_friendBlockKey, jsonString);
   }
+
+  bool loadOnboardingCompleted() {
+    return _prefs.getBool(_onboardingCompletedKey) ?? false;
+  }
+
+  Future<void> saveOnboardingCompleted(bool completed) {
+    return _prefs.setBool(_onboardingCompletedKey, completed);
+  }
+
+  String? loadUserId() {
+    return _prefs.getString(_userIdKey);
+  }
+
+  String? loadDisplayName() {
+    return _prefs.getString(_displayNameKey);
+  }
+
+  String? loadAvatarEmoji() {
+    return _prefs.getString(_avatarEmojiKey);
+  }
+
+  Future<void> saveUserProfile({
+    required String userId,
+    required String displayName,
+    required String avatarEmoji,
+  }) async {
+    await _prefs.setString(_userIdKey, userId);
+    await _prefs.setString(_displayNameKey, displayName);
+    await _prefs.setString(_avatarEmojiKey, avatarEmoji);
+  }
 }
 
 final sharedPrefsProvider = Provider<SharedPreferences>((ref) {
@@ -76,4 +111,3 @@ final pttPrefsProvider = Provider<PttPrefs>((ref) {
   final prefs = ref.watch(sharedPrefsProvider);
   return PttPrefs(prefs);
 });
-
