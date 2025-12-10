@@ -2,10 +2,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyage/backend/auth_api.dart';
 import 'package:voyage/backend/chat_api.dart';
 import 'package:voyage/backend/friend_api.dart';
+import 'package:voyage/backend/firebase/firebase_auth_client.dart';
+import 'package:voyage/backend/firebase/firebase_user_profile_repository.dart';
 import 'package:voyage/backend/ptt_media_api.dart';
 import 'package:voyage/backend/repositories.dart';
 import 'package:voyage/feature_flags.dart';
 import 'package:voyage/ptt_debug_log.dart';
+
+final firebaseAuthClientProvider = Provider<FirebaseAuthClient>(
+  (ref) => FirebaseAuthClient(),
+);
+
+final firebaseUserProfileRepositoryProvider =
+    Provider<FirebaseUserProfileRepository>(
+  (ref) => FirebaseUserProfileRepository(),
+);
 
 final authApiProvider = Provider<AuthApi>(
   (ref) {

@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,6 +21,24 @@ Future<void> main() async {
     await Firebase.initializeApp();
     final envName = AppEnv.currentName;
     debugPrint('[Firebase] initialized for env: $envName');
+    final auth = FirebaseAuth.instance;
+    final currentUser = auth.currentUser;
+    if (currentUser == null) {
+      try {
+        final credential = await auth.signInAnonymously();
+        final uid = credential.user?.uid;
+        debugPrint(
+          '[Firebase Auth] signed in anonymously {uid: $uid}',
+        );
+      } catch (e, st) {
+        debugPrint('[Firebase Auth] signIn error: $e');
+        debugPrint(st.toString());
+      }
+    } else {
+      debugPrint(
+        '[Firebase Auth] already signed in {uid: ${currentUser.uid}}',
+      );
+    }
   } catch (e, st) {
     debugPrint('[Firebase] initialization error: $e');
     debugPrint(st.toString());

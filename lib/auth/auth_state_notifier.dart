@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:voyage/app_env.dart';
 import 'package:voyage/auth/auth_state.dart';
 import 'package:voyage/backend/backend_providers.dart';
 import 'package:voyage/backend/repositories.dart';
@@ -88,6 +90,37 @@ class AuthStateNotifier extends StateNotifier<AuthState> {
         avatarEmoji: avatarEmoji,
       );
       await prefs.saveOnboardingCompleted(true);
+      try {
+        final firebaseAuthClient =
+            _ref.read(firebaseAuthClientProvider);
+        final uid =
+            await firebaseAuthClient.signInAnonymouslyAndGetUid();
+        final sharedPrefs = _ref.read(sharedPrefsProvider);
+        await sharedPrefs.setString('firebase_uid', uid);
+        debugPrint(
+          '[Firebase][Auth] firebase_uid saved to SharedPreferences',
+        );
+        try {
+          final envName = AppEnv.currentName;
+          final userProfileRepo =
+              _ref.read(firebaseUserProfileRepositoryProvider);
+          await userProfileRepo.upsertUserProfile(
+            uid: uid,
+            appEnv: envName,
+            platform: 'android',
+          );
+        } catch (e, st) {
+          debugPrint(
+            '[Firebase][UserProfile] upsert error: $e',
+          );
+          debugPrint(st.toString());
+        }
+      } catch (e, st) {
+        debugPrint(
+          '[Firebase][Auth] signInAnonymously error: $e',
+        );
+        debugPrint(st.toString());
+      }
     } catch (e) {
       PttLogger.log(
         '[Auth]',
