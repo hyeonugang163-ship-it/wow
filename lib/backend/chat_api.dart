@@ -286,6 +286,7 @@ class RealChatApi implements ChatApi {
         text: text,
         fromMe: true,
         createdAt: now,
+        fromUid: fromUid,
       );
 
       PttLogger.log(
@@ -331,13 +332,16 @@ class RealChatApi implements ChatApi {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      final message = ChatMessage.voice(
+      final message = ChatMessage(
         id: docRef.id,
         chatId: chatId,
-        audioPath: localPath,
+        text: null,
         fromMe: true,
         createdAt: now,
+        type: ChatMessageType.voice,
+        audioPath: localPath,
         durationMillis: max(durationMillis, 0),
+        fromUid: fromUid,
       );
 
       PttLogger.log(

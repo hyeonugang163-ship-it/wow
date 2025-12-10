@@ -146,6 +146,7 @@ class FF {
   /// 이후 applyPolicy가 호출되면 해당 값으로 덮어쓴다.
   static void initForEnv() {
     final env = AppEnv.current;
+    final envName = AppEnv.currentName;
 
     PolicyConfig base;
     switch (env) {
@@ -172,7 +173,7 @@ class FF {
           forceTurnTcpTls443: false,
           pttMinIntervalMillis: 300,
           useFakeVoiceTransport: false,
-          useFakeBackend: true,
+          useFakeBackend: false,
         );
         break;
       case AppEnvironment.prod:
@@ -185,12 +186,15 @@ class FF {
           forceTurnTcpTls443: false,
           pttMinIntervalMillis: 300,
           useFakeVoiceTransport: false,
-          useFakeBackend: false,
+          useFakeBackend: true,
         );
         break;
     }
 
     _raw = base;
     _recomputeEffective();
+
+    final bool backendIsFake = useFakeBackend;
+    print('[FF] env=$envName useFakeBackend=$backendIsFake');
   }
 }

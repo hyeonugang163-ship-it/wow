@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyage/backend/api_result.dart';
 import 'package:voyage/backend/auth_api.dart';
@@ -458,16 +459,28 @@ class RealChatRepository implements ChatRepository {
 
   @override
   Future<ChatMessage> sendText(String chatId, String text) async {
+    debugPrint(
+      '[FirestoreChatRepository] try sendText '
+      'chatId=$chatId textLength=${text.length}',
+    );
     final result = await _api.sendTextMessage(chatId, text);
     final error = result.error;
     if (error != null) {
+      debugPrint(
+        '[FirestoreChatRepository] sendText error: ${error.type.name}',
+      );
       _logApiError('RealChatRepository.sendText', error);
       _emitGenericError(_ref, code: error.code);
       throw Exception(
         'RealChatRepository.sendText failed: ${error.type}',
       );
     }
-    return result.data!;
+    final ChatMessage message = result.data!;
+    debugPrint(
+      '[FirestoreChatRepository] sendText success docId=${message.id} '
+      'fromUid=${message.fromUid ?? 'null'}',
+    );
+    return message;
   }
 
   @override
@@ -476,17 +489,33 @@ class RealChatRepository implements ChatRepository {
     String localPath,
     int durationMillis,
   ) async {
-    final result =
-        await _api.sendVoiceMessage(chatId, localPath, durationMillis);
+    debugPrint(
+      '[FirestoreChatRepository] try sendVoice '
+      'chatId=$chatId pathHash=${localPath.hashCode} '
+      'durationMillis=$durationMillis',
+    );
+    final result = await _api.sendVoiceMessage(
+      chatId,
+      localPath,
+      durationMillis,
+    );
     final error = result.error;
     if (error != null) {
+      debugPrint(
+        '[FirestoreChatRepository] sendVoice error: ${error.type.name}',
+      );
       _logApiError('RealChatRepository.sendVoice', error);
       _emitGenericError(_ref, code: error.code);
       throw Exception(
         'RealChatRepository.sendVoice failed: ${error.type}',
       );
     }
-    return result.data!;
+    final ChatMessage message = result.data!;
+    debugPrint(
+      '[FirestoreChatRepository] sendVoice success docId=${message.id} '
+      'fromUid=${message.fromUid ?? 'null'}',
+    );
+    return message;
   }
 }
 
