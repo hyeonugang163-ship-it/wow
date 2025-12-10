@@ -29,10 +29,9 @@ final authApiProvider = Provider<AuthApi>(
 
 final friendApiProvider = Provider<FriendApi>(
   (ref) {
-    if (FF.useFakeBackend) {
-      return FakeFriendApi();
-    }
-    return RealFriendApi();
+    // NOTE: 친구 목록은 현재 단계에서는 항상 FakeFriendApi를 사용한다.
+    // FF.useFakeBackend와 무관하게 더미 친구(u1~u4)를 노출하기 위함이다.
+    return FakeFriendApi();
   },
 );
 
@@ -74,17 +73,14 @@ final authRepositoryProvider = Provider<AuthRepository>(
 
 final friendRepositoryProvider = Provider<FriendRepository>(
   (ref) {
-    final useFake = FF.useFakeBackend;
+    const bool useFake = true;
     PttLogger.logConsoleOnly(
       '[Backend][Repository]',
       'create FriendRepository',
       meta: <String, Object?>{'useFakeBackend': useFake},
     );
     final api = ref.read(friendApiProvider);
-    if (useFake) {
-      return FakeFriendRepository(api, ref);
-    }
-    return RealFriendRepository(api, ref);
+    return FakeFriendRepository(api, ref);
   },
 );
 
