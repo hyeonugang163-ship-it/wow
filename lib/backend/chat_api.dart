@@ -1,5 +1,8 @@
 import 'dart:math';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:voyage/backend/api_result.dart';
 import 'package:voyage/chat_message.dart';
 import 'package:voyage/ptt_debug_log.dart';
@@ -146,36 +149,167 @@ class FakeChatApi implements ChatApi {
 }
 
 class RealChatApi implements ChatApi {
-  RealChatApi();
+  RealChatApi({
+    FirebaseFirestore? firestore,
+    FirebaseAuth? firebaseAuth,
+  })  : _firestore = firestore ?? FirebaseFirestore.instance,
+        _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance;
+
+  final FirebaseFirestore _firestore;
+  final FirebaseAuth _firebaseAuth;
+
+  String? get _currentUid => _firebaseAuth.currentUser?.uid;
+
+  CollectionReference<Map<String, dynamic>> _messagesCollection(
+    String chatId,
+  ) {
+    return _firestore
+        .collection('chats')
+        .doc(chatId)
+        .collection('messages');
+  }
+
+  /// Firestore message document schema (v1.1):
+  /// - text: String? (텍스트 메시지 내용)
+  /// - audioPath: String? (음성 메시지 로컬/원격 경로)
+  /// - durationMillis: int? (음성 메시지 길이 ms)
+  /// - fromUid: String? (FirebaseAuth uid)
+  /// - createdAt: Timestamp (FieldValue.serverTimestamp)
+  ChatMessage _fromDocument({
+    required String chatId,
+    required DocumentSnapshot<Map<String, dynamic>> doc,
+  }) {
+    final data = doc.data() ?? <String, dynamic>{};
+    final String? text = data['text'] as String?;
+    final String? audioPath = data['audioPath'] as String?;
+    final int? durationMillis = data['durationMillis'] as int?;
+    final String? fromUid = data['fromUid'] as String?;
+    final Timestamp? createdAtTs =
+        data['createdAt'] as Timestamp?;
+    final DateTime createdAt =
+        createdAtTs?.toDate() ?? DateTime.now();
+
+    final ChatMessageType type =
+        audioPath != null && audioPath.isNotEmpty
+            ? ChatMessageType.voice
+            : ChatMessageType.text;
+
+    final String? currentUid = _currentUid;
+    final bool isFromMe =
+        fromUid != null && currentUid != null && fromUid == currentUid;
+
+    return ChatMessage(
+      id: doc.id,
+      chatId: chatId,
+      text: text,
+      fromMe: isFromMe,
+      createdAt: createdAt,
+      type: type,
+      audioPath: audioPath,
+      durationMillis: durationMillis,
+      fromUid: fromUid,
+    );
+  }
 
   @override
   Future<ApiResult<List<ChatMessage>>> fetchMessages(
     String chatId, {
     DateTime? since,
-  }) {
-    return Future<ApiResult<List<ChatMessage>>>.value(
-      ApiResult<List<ChatMessage>>.failure(
+  }) async {
+    try {
+      Query<Map<String, dynamic>> query =
+          _messagesCollection(chatId).orderBy(
+        'createdAt',
+        descending: false,
+      );
+      if (since != null) {
+        query = query.where(
+          'createdAt',
+          isGreaterThan: Timestamp.fromDate(since),
+        );
+      }
+      final snapshot = await query.get();
+      final messages = snapshot.docs
+          .map(
+            (doc) => _fromDocument(
+              chatId: chatId,
+              doc: doc,
+            ),
+          )
+          .toList(growable: false);
+
+      PttLogger.log(
+        '[Backend][ChatApi][Real]',
+        'fetchMessages',
+        meta: <String, Object?>{
+          'chatIdHash': chatId.hashCode,
+          'count': messages.length,
+        },
+      );
+
+      return ApiResult<List<ChatMessage>>.success(messages);
+    } catch (e, st) {
+      debugPrint(
+        '[Backend][ChatApi][Real] fetchMessages error: $e',
+      );
+      debugPrint(st.toString());
+      return ApiResult<List<ChatMessage>>.failure(
         const ApiError(
           type: ApiErrorType.unknown,
-          message: 'RealChatApi.fetchMessages is not implemented',
+          message: 'RealChatApi.fetchMessages error',
         ),
-      ),
-    );
+      );
+    }
   }
 
   @override
   Future<ApiResult<ChatMessage>> sendTextMessage(
     String chatId,
     String text,
-  ) {
-    return Future<ApiResult<ChatMessage>>.value(
-      ApiResult<ChatMessage>.failure(
+  ) async {
+    try {
+      final String? fromUid = _currentUid;
+      final now = DateTime.now();
+      final collection = _messagesCollection(chatId);
+      final docRef = collection.doc();
+      await docRef.set(<String, Object?>{
+        'text': text,
+        'audioPath': null,
+        'durationMillis': null,
+        'fromUid': fromUid,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      final message = ChatMessage(
+        id: docRef.id,
+        chatId: chatId,
+        text: text,
+        fromMe: true,
+        createdAt: now,
+      );
+
+      PttLogger.log(
+        '[Backend][ChatApi][Real]',
+        'sendTextMessage',
+        meta: <String, Object?>{
+          'chatIdHash': chatId.hashCode,
+          'textLength': text.length,
+        },
+      );
+
+      return ApiResult<ChatMessage>.success(message);
+    } catch (e, st) {
+      debugPrint(
+        '[Backend][ChatApi][Real] sendTextMessage error: $e',
+      );
+      debugPrint(st.toString());
+      return ApiResult<ChatMessage>.failure(
         const ApiError(
           type: ApiErrorType.unknown,
-          message: 'RealChatApi.sendTextMessage is not implemented',
+          message: 'RealChatApi.sendTextMessage error',
         ),
-      ),
-    );
+      );
+    }
   }
 
   @override
@@ -183,14 +317,51 @@ class RealChatApi implements ChatApi {
     String chatId,
     String localPath,
     int durationMillis,
-  ) {
-    return Future<ApiResult<ChatMessage>>.value(
-      ApiResult<ChatMessage>.failure(
+  ) async {
+    try {
+      final String? fromUid = _currentUid;
+      final now = DateTime.now();
+      final collection = _messagesCollection(chatId);
+      final docRef = collection.doc();
+      await docRef.set(<String, Object?>{
+        'text': null,
+        'audioPath': localPath,
+        'durationMillis': durationMillis,
+        'fromUid': fromUid,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      final message = ChatMessage.voice(
+        id: docRef.id,
+        chatId: chatId,
+        audioPath: localPath,
+        fromMe: true,
+        createdAt: now,
+        durationMillis: max(durationMillis, 0),
+      );
+
+      PttLogger.log(
+        '[Backend][ChatApi][Real]',
+        'sendVoiceMessage',
+        meta: <String, Object?>{
+          'chatIdHash': chatId.hashCode,
+          'localPathHash': localPath.hashCode,
+          'durationMillis': durationMillis,
+        },
+      );
+
+      return ApiResult<ChatMessage>.success(message);
+    } catch (e, st) {
+      debugPrint(
+        '[Backend][ChatApi][Real] sendVoiceMessage error: $e',
+      );
+      debugPrint(st.toString());
+      return ApiResult<ChatMessage>.failure(
         const ApiError(
           type: ApiErrorType.unknown,
-          message: 'RealChatApi.sendVoiceMessage is not implemented',
+          message: 'RealChatApi.sendVoiceMessage error',
         ),
-      ),
-    );
+      );
+    }
   }
 }
