@@ -567,17 +567,70 @@ class RealAuthRepository implements AuthRepository {
   final AuthApi _api;
   final Ref _ref;
 
+  static AppUser? _cachedUser;
+
   @override
   Future<AuthState> loadInitialAuthState() async {
+    final prefs = _ref.read(pttPrefsProvider);
+    final bool onboardingCompleted =
+        prefs.loadOnboardingCompleted();
+    final existing = _cachedUser;
+    if (existing != null) {
+      PttLogger.log(
+        '[Auth]',
+        'RealAuthRepository.loadInitialAuthState existing user',
+        meta: <String, Object?>{
+          'userId': existing.id,
+        },
+      );
+      return AuthState(
+        status: AuthStatus.signedIn,
+        user: existing,
+        isLoading: false,
+      );
+    }
+
+    if (onboardingCompleted) {
+      final userId =
+          prefs.loadUserId() ?? 'user_local';
+      final displayName =
+          prefs.loadDisplayName() ?? 'User';
+      final avatarEmoji =
+          prefs.loadAvatarEmoji() ?? '😄';
+
+      final user = AppUser(
+        id: userId,
+        displayName: displayName,
+        avatarEmoji: avatarEmoji,
+        createdAt: DateTime.now(),
+      );
+      _cachedUser = user;
+
+      PttLogger.log(
+        '[Auth]',
+        'RealAuthRepository.loadInitialAuthState from prefs (onboardingCompleted=true)',
+        meta: <String, Object?>{
+          'userId': userId,
+        },
+      );
+
+      return AuthState(
+        status: AuthStatus.signedIn,
+        user: user,
+        isLoading: false,
+      );
+    }
+
     PttLogger.log(
       '[Auth]',
-      'RealAuthRepository.loadInitialAuthState (stub)',
+      'RealAuthRepository.loadInitialAuthState no user, onboarding',
       meta: <String, Object?>{
         'apiType': _api.runtimeType.toString(),
       },
     );
+
     return const AuthState(
-      status: AuthStatus.signedOut,
+      status: AuthStatus.onboarding,
       user: null,
       isLoading: false,
     );
@@ -590,18 +643,61 @@ class RealAuthRepository implements AuthRepository {
   ) async {
     PttLogger.log(
       '[Auth]',
-      'RealAuthRepository.completeOnboarding (stub)',
+      'RealAuthRepository.completeOnboarding start',
       meta: <String, Object?>{
         'displayNameLen': displayName.length,
         'apiType': _api.runtimeType.toString(),
       },
     );
-    _emitGenericError(_ref, code: 'real_auth_not_implemented');
-    return const AuthState(
-      status: AuthStatus.signedOut,
-      user: null,
+
+    final String deviceId =
+        DateTime.now().millisecondsSinceEpoch.toString();
+    try {
+      final result = await _api.loginWithToken(deviceId);
+      final error = result.error;
+      if (error != null) {
+        _logApiError(
+          'RealAuthRepository.completeOnboarding.login',
+          error,
+        );
+        _emitGenericError(_ref, code: error.code);
+      }
+    } catch (e) {
+      _logApiError(
+        'RealAuthRepository.completeOnboarding.login.exception',
+        const ApiError(type: ApiErrorType.unknown),
+      );
+      _emitGenericError(_ref, code: 'auth_login_exception');
+      PttLogger.log(
+        '[Auth]',
+        'RealAuthRepository.completeOnboarding login exception',
+        meta: <String, Object?>{
+          'error': e.toString(),
+        },
+      );
+    }
+
+    final now = DateTime.now();
+    final user = AppUser(
+      id: 'user_$deviceId',
+      displayName: displayName,
+      avatarEmoji: avatarEmoji,
+      createdAt: now,
+    );
+    _cachedUser = user;
+
+    PttLogger.log(
+      '[Auth]',
+      'RealAuthRepository.completeOnboarding success',
+      meta: <String, Object?>{
+        'userId': user.id,
+      },
+    );
+
+    return AuthState(
+      status: AuthStatus.signedIn,
+      user: user,
       isLoading: false,
-      lastErrorCode: 'real_auth_not_implemented',
     );
   }
 
@@ -609,7 +705,8 @@ class RealAuthRepository implements AuthRepository {
   Future<void> signOut() async {
     PttLogger.log(
       '[Auth]',
-      'RealAuthRepository.signOut (stub)',
+      'RealAuthRepository.signOut',
     );
+    _cachedUser = null;
   }
 }
