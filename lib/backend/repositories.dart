@@ -53,6 +53,13 @@ abstract class ChatRepository {
     String localPath,
     int durationMillis,
   );
+
+  Future<void> markMessagesAsSeen(
+    String chatId,
+    List<String> messageIds,
+  );
+
+  Stream<List<ChatMessage>> watchMessages(String chatId);
 }
 
 abstract class PttMediaRepository {
@@ -303,6 +310,26 @@ class FakeChatRepository implements ChatRepository {
   }
 
   @override
+  Stream<List<ChatMessage>> watchMessages(String chatId) {
+    // NOTE: Fake 환경에서는 현재 단계에서 실시간 동기화가 필요하지 않으므로
+    // 빈 스트림을 반환한다. 필요 시 추후 in-memory 변경에 맞춰 확장할 수 있다.
+    return const Stream<List<ChatMessage>>.empty();
+  }
+
+  @override
+  Future<void> markMessagesAsSeen(
+    String chatId,
+    List<String> messageIds,
+  ) async {
+    // NOTE: Fake 환경에서는 별도 저장소 동기화가 필요하지 않으므로
+    // 인터페이스 호환을 위해 no-op으로 둔다.
+    debugPrint(
+      '[FakeChatRepository] markMessagesAsSeen chatId=$chatId '
+      'ids=${messageIds.length}',
+    );
+  }
+
+  @override
   Future<ChatMessage> sendText(String chatId, String text) async {
     final result = await _api.sendTextMessage(chatId, text);
     final error = result.error;
@@ -447,14 +474,24 @@ class RealChatRepository implements ChatRepository {
 
   @override
   Future<List<ChatMessage>> loadMessages(String chatId) async {
+    debugPrint(
+      '[FirestoreChatRepository] fetchMessages chatId=$chatId',
+    );
     final result = await _api.fetchMessages(chatId);
     final error = result.error;
     if (error != null) {
+      debugPrint(
+        '[FirestoreChatRepository] fetchMessages error: ${error.type.name}',
+      );
       _logApiError('RealChatRepository.loadMessages', error);
       _emitGenericError(_ref, code: error.code);
       return <ChatMessage>[];
     }
-    return result.data ?? <ChatMessage>[];
+    final messages = result.data ?? <ChatMessage>[];
+    debugPrint(
+      '[FirestoreChatRepository] fetchMessages success count=${messages.length}',
+    );
+    return messages;
   }
 
   @override
@@ -481,6 +518,49 @@ class RealChatRepository implements ChatRepository {
       'fromUid=${message.fromUid ?? 'null'}',
     );
     return message;
+  }
+
+  @override
+  Future<void> markMessagesAsSeen(
+    String chatId,
+    List<String> messageIds,
+  ) async {
+    if (messageIds.isEmpty) {
+      return;
+    }
+    debugPrint(
+      '[FirestoreChatRepository] markMessagesAsSeen '
+      'chatId=$chatId ids=${messageIds.length}',
+    );
+    try {
+      await _api.markMessagesAsSeen(
+        chatId: chatId,
+        messageIds: messageIds,
+      );
+      debugPrint(
+        '[FirestoreChatRepository] markMessagesAsSeen success '
+        'chatId=$chatId ids=${messageIds.length}',
+      );
+    } catch (e) {
+      debugPrint(
+        '[FirestoreChatRepository] markMessagesAsSeen error: $e',
+      );
+      _emitGenericError(_ref, code: 'chat_mark_seen_error');
+    }
+  }
+
+  @override
+  Stream<List<ChatMessage>> watchMessages(String chatId) {
+    debugPrint(
+      '[FirestoreChatRepository] watchMessages start chatId=$chatId',
+    );
+    return _api.watchMessages(chatId).map((messages) {
+      debugPrint(
+        '[FirestoreChatRepository] watchMessages event '
+        'chatId=$chatId count=${messages.length}',
+      );
+      return messages;
+    });
   }
 
   @override

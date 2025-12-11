@@ -1,7 +1,9 @@
+import 'dart:io';
 import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:voyage/backend/api_result.dart';
 import 'package:voyage/chat_message.dart';
@@ -11,6 +13,13 @@ abstract class ChatApi {
   Future<ApiResult<List<ChatMessage>>> fetchMessages(
     String chatId, {
     DateTime? since,
+  });
+
+  Stream<List<ChatMessage>> watchMessages(String chatId);
+
+  Future<void> markMessagesAsSeen({
+    required String chatId,
+    required List<String> messageIds,
   });
 
   Future<ApiResult<ChatMessage>> sendTextMessage(
@@ -146,17 +155,37 @@ class FakeChatApi implements ChatApi {
 
     return ApiResult<ChatMessage>.success(message);
   }
+
+  @override
+  Stream<List<ChatMessage>> watchMessages(String chatId) {
+    // Fake 환경에서는 현재 단계에서 별도의 실시간 동기화가 필요하지 않으므로
+    // 빈 스트림을 반환한다. 인터페이스 호환성을 위한 구현이다.
+    return const Stream<List<ChatMessage>>.empty();
+  }
+
+  @override
+  Future<void> markMessagesAsSeen({
+    required String chatId,
+    required List<String> messageIds,
+  }) async {
+    // NOTE: Fake 환경에서는 현재 단계에서 별도 저장소 동기화가 필요하지 않으므로
+    // 구현을 비워 둔다. 필요 시 _messagesByChat을 업데이트하도록 확장할 수 있다.
+    return;
+  }
 }
 
 class RealChatApi implements ChatApi {
   RealChatApi({
     FirebaseFirestore? firestore,
     FirebaseAuth? firebaseAuth,
+    FirebaseStorage? storage,
   })  : _firestore = firestore ?? FirebaseFirestore.instance,
-        _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance;
+        _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
+        _storage = storage ?? FirebaseStorage.instance;
 
   final FirebaseFirestore _firestore;
   final FirebaseAuth _firebaseAuth;
+  final FirebaseStorage _storage;
 
   String? get _currentUid => _firebaseAuth.currentUser?.uid;
 
@@ -188,6 +217,9 @@ class RealChatApi implements ChatApi {
         data['createdAt'] as Timestamp?;
     final DateTime createdAt =
         createdAtTs?.toDate() ?? DateTime.now();
+    final Timestamp? seenAtTs =
+        data['seenAt'] as Timestamp?;
+    final DateTime? seenAt = seenAtTs?.toDate();
 
     final ChatMessageType type =
         audioPath != null && audioPath.isNotEmpty
@@ -208,7 +240,52 @@ class RealChatApi implements ChatApi {
       audioPath: audioPath,
       durationMillis: durationMillis,
       fromUid: fromUid,
+      seenAt: seenAt,
     );
+  }
+
+  @override
+  Stream<List<ChatMessage>> watchMessages(String chatId) {
+    final query = _messagesCollection(chatId).orderBy(
+      'createdAt',
+      descending: false,
+    );
+    return query.snapshots().map(
+      (QuerySnapshot<Map<String, dynamic>> snapshot) {
+        return snapshot.docs
+            .map(
+              (doc) => _fromDocument(
+                chatId: chatId,
+                doc: doc,
+              ),
+            )
+            .toList(growable: false);
+      },
+    );
+  }
+
+  @override
+  Future<void> markMessagesAsSeen({
+    required String chatId,
+    required List<String> messageIds,
+  }) async {
+    if (messageIds.isEmpty) {
+      return;
+    }
+    try {
+      for (final messageId in messageIds) {
+        final docRef = _messagesCollection(chatId).doc(messageId);
+        await docRef.update(<String, Object?>{
+          'seenAt': FieldValue.serverTimestamp(),
+        });
+      }
+    } catch (e, st) {
+      debugPrint(
+        '[Backend][ChatApi][Real] markMessagesAsSeen error: $e',
+      );
+      debugPrint(st.toString());
+      rethrow;
+    }
   }
 
   @override
@@ -324,13 +401,38 @@ class RealChatApi implements ChatApi {
       final now = DateTime.now();
       final collection = _messagesCollection(chatId);
       final docRef = collection.doc();
+      debugPrint(
+        '[FirestoreChatRepository] sendVoice upload start '
+        'chatId=$chatId path=$localPath',
+      );
+
+      final String uidForPath = fromUid ?? 'anonymous';
+      final file = File(localPath);
+      final ref = _storage
+          .ref()
+          .child('voice')
+          .child(uidForPath)
+          .child(chatId)
+          .child('${docRef.id}.aac');
+      await ref.putFile(file);
+      final downloadUrl = await ref.getDownloadURL();
+
+      debugPrint(
+        '[FirestoreChatRepository] sendVoice upload success url=$downloadUrl',
+      );
+
       await docRef.set(<String, Object?>{
         'text': null,
-        'audioPath': localPath,
+        'audioPath': downloadUrl,
         'durationMillis': durationMillis,
         'fromUid': fromUid,
         'createdAt': FieldValue.serverTimestamp(),
       });
+
+      debugPrint(
+        '[FirestoreChatRepository] sendVoice firestore write success '
+        'docId=${docRef.id}',
+      );
 
       final message = ChatMessage(
         id: docRef.id,
@@ -339,7 +441,7 @@ class RealChatApi implements ChatApi {
         fromMe: true,
         createdAt: now,
         type: ChatMessageType.voice,
-        audioPath: localPath,
+        audioPath: downloadUrl,
         durationMillis: max(durationMillis, 0),
         fromUid: fromUid,
       );
@@ -356,6 +458,9 @@ class RealChatApi implements ChatApi {
 
       return ApiResult<ChatMessage>.success(message);
     } catch (e, st) {
+      debugPrint(
+        '[FirestoreChatRepository] sendVoice upload/write error: $e',
+      );
       debugPrint(
         '[Backend][ChatApi][Real] sendVoiceMessage error: $e',
       );

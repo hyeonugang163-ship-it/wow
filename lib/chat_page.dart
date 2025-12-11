@@ -40,7 +40,7 @@ class PttChatRouteArgs {
 /// 5) 두 번째 버블에서도 동일하게 동작하는지 확인한다.
 /// 6) (선택) 파일을 삭제하거나 존재하지 않는 path를 가진 메시지를 만들어
 ///    error 상태 아이콘/텍스트가 잘 표시되는지 확인한다.
-class ChatPage extends ConsumerWidget {
+class ChatPage extends ConsumerStatefulWidget {
   const ChatPage({
     super.key,
     required this.chatId,
@@ -51,7 +51,29 @@ class ChatPage extends ConsumerWidget {
   final PttChatRouteArgs? pttArgs;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ChatPage> createState() => _ChatPageState();
+}
+
+class _ChatPageState extends ConsumerState<ChatPage> {
+  @override
+  void initState() {
+    super.initState();
+    final notifier = ref.read(chatMessagesProvider.notifier);
+    notifier.loadInitialMessages(widget.chatId);
+    notifier.startWatching(widget.chatId);
+  }
+
+  @override
+  void dispose() {
+    ref.read(chatMessagesProvider.notifier).stopWatching();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final chatId = widget.chatId;
+    final PttChatRouteArgs? args = widget.pttArgs;
+
     // 상태 변경 시 재빌드를 위해 watch.
     ref.watch(chatMessagesProvider);
     final currentPlayingMessageId =
@@ -61,6 +83,7 @@ class ChatPage extends ConsumerWidget {
     final notifier = ref.read(chatMessagesProvider.notifier);
     final List<ChatMessage> messages =
         notifier.messagesForChat(chatId).reversed.toList();
+    notifier.markAllAsSeen(chatId);
 
     final mode = ref.watch(pttModeProvider);
     final friends = ref.watch(friendListProvider);
@@ -71,7 +94,6 @@ class ChatPage extends ConsumerWidget {
       friendName = matches.first.name;
     }
 
-    final args = pttArgs;
     final effectiveFriendName =
         args?.friendName ?? friendName ?? chatId;
     final isWalkieAllowed = args?.isWalkieAllowed ?? false;
@@ -258,6 +280,10 @@ class ChatPage extends ConsumerWidget {
                 } else {
                   final textColor =
                       AppColors.textPrimary;
+                  final bool isSeen =
+                      message.seenAt != null;
+                  final String? statusText =
+                      isMe ? (isSeen ? '읽음' : '전송됨') : null;
 
                   return Align(
                     alignment: alignment,
@@ -277,14 +303,34 @@ class ChatPage extends ConsumerWidget {
                         borderRadius:
                             BorderRadius.circular(20),
                       ),
-                      child: Text(
-                        message.text ?? '',
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodyMedium
-                            ?.copyWith(
-                              color: textColor,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment:
+                            CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            message.text ?? '',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  color: textColor,
+                                ),
+                          ),
+                          if (statusText != null) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              statusText,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelSmall
+                                  ?.copyWith(
+                                    color: textColor
+                                        .withOpacity(0.6),
+                                  ),
                             ),
+                          ],
+                        ],
                       ),
                     ),
                   );

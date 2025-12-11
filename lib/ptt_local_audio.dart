@@ -191,7 +191,14 @@ class PttLocalAudioEngine {
 
     try {
       await _player.stop();
-      await _player.setFilePath(path);
+      final bool isRemote =
+          path.startsWith('http://') ||
+              path.startsWith('https://');
+      if (isRemote) {
+        await _player.setUrl(path);
+      } else {
+        await _player.setFilePath(path);
+      }
       _lastPlaybackDuration = _player.duration;
       await _player.play();
     } catch (e) {

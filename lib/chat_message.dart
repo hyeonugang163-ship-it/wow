@@ -16,6 +16,7 @@ class ChatMessage {
     this.audioPath,
     this.durationMillis,
     this.fromUid,
+    this.seenAt,
   });
 
   final String id;
@@ -30,6 +31,7 @@ class ChatMessage {
   final bool fromMe;
   final DateTime createdAt;
   final String? fromUid;
+  final DateTime? seenAt;
 
   final ChatMessageType type;
   final String? audioPath;
@@ -71,6 +73,7 @@ class ChatMessage {
       'fromMe': fromMe,
       'fromUid': fromUid,
       'createdAt': createdAt.toIso8601String(),
+      'seenAt': seenAt?.toIso8601String(),
     };
   }
 
@@ -88,6 +91,7 @@ class ChatMessage {
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
           DateTime.now(),
       fromUid: json['fromUid'] as String?,
+      seenAt: DateTime.tryParse(json['seenAt'] as String? ?? ''),
       type: messageType,
       audioPath: json['audioPath'] as String?,
       durationMillis: json['durationMillis'] as int?,

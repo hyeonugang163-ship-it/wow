@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voyage/abuse.dart';
+import 'package:voyage/chat_message.dart';
+import 'package:voyage/chat_state.dart';
 import 'package:voyage/core/theme/app_colors.dart';
 import 'package:voyage/friend_state.dart';
 import 'package:voyage/ptt_ui_event.dart';
@@ -12,9 +14,29 @@ import 'package:voyage/ptt_ui_event.dart';
 class FriendsPage extends ConsumerWidget {
   const FriendsPage({super.key});
 
+  String _formatTime(DateTime time) {
+    final now = DateTime.now();
+    final bool isSameDay =
+        now.year == time.year &&
+        now.month == time.month &&
+        now.day == time.day;
+    if (isSameDay) {
+      final hour = time.hour.toString().padLeft(2, '0');
+      final minute = time.minute.toString().padLeft(2, '0');
+      return '$hour:$minute';
+    }
+    final month = time.month.toString().padLeft(2, '0');
+    final day = time.day.toString().padLeft(2, '0');
+    return '$month/$day';
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final friends = ref.watch(friendListProvider);
+    // 채팅 요약 정보 업데이트를 위해 watch만 걸어 둔다.
+    ref.watch(chatMessagesProvider);
+    final chatNotifier =
+        ref.read(chatMessagesProvider.notifier);
 
     return Scaffold(
       appBar: AppBar(
@@ -29,9 +51,39 @@ class FriendsPage extends ConsumerWidget {
               itemCount: friends.length,
               itemBuilder: (context, index) {
                 final friend = friends[index];
+                final chatId = friend.id;
                 final name = friend.name;
                 final initial =
                     name.isNotEmpty ? name.characters.first : '?';
+
+                final ChatMessage? lastMessage =
+                    chatNotifier.lastMessageForChat(chatId);
+                final int unreadCount =
+                    chatNotifier.unreadCountForChat(chatId);
+
+                String subtitleText;
+                if (lastMessage != null) {
+                  String preview;
+                  if (lastMessage.type ==
+                          ChatMessageType.voice &&
+                      (lastMessage.text == null ||
+                          lastMessage.text!.isEmpty)) {
+                    preview = '음성 메시지';
+                  } else {
+                    preview =
+                        lastMessage.text?.isNotEmpty == true
+                            ? lastMessage.text!
+                            : '메시지';
+                  }
+                  final timeLabel =
+                      _formatTime(lastMessage.createdAt);
+                  subtitleText = '$preview · $timeLabel';
+                } else if (friend.status != null &&
+                    friend.status!.isNotEmpty) {
+                  subtitleText = friend.status!;
+                } else {
+                  subtitleText = '아직 메시지 없음';
+                }
 
                 return ListTile(
                   contentPadding: const EdgeInsets.symmetric(
@@ -57,18 +109,44 @@ class FriendsPage extends ConsumerWidget {
                         .textTheme
                         .bodyLarge,
                   ),
-                  subtitle: friend.status != null
-                      ? Text(
-                          friend.status!,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall,
-                        )
-                      : null,
-                  trailing: IconButton(
-                    icon: const Icon(Icons.more_vert),
-                    tooltip: '친구 설정',
-                    onPressed: () {
+                  subtitle: Text(
+                    subtitleText,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall,
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (unreadCount > 0)
+                        Container(
+                          padding:
+                              const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          margin:
+                              const EdgeInsets.only(right: 4),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            borderRadius:
+                                BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            unreadCount.toString(),
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(
+                                  color: AppColors
+                                      .textPrimary,
+                                ),
+                          ),
+                        ),
+                      IconButton(
+                        icon: const Icon(Icons.more_vert),
+                        tooltip: '친구 설정',
+                        onPressed: () {
                       showModalBottomSheet<void>(
                         context: context,
                         builder: (context) {
@@ -248,7 +326,9 @@ class FriendsPage extends ConsumerWidget {
                           );
                         },
                       );
-                    },
+                        },
+                      ),
+                    ],
                   ),
                   onTap: () {
                     ref
