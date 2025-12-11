@@ -22,15 +22,11 @@ subprojects {
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
 subprojects {
-    project.evaluationDependsOn(":app")
-}
-
-subprojects {
-    afterEvaluate {
-        tasks.withType<JavaCompile>().configureEach {
-            sourceCompatibility = JavaVersion.VERSION_17.toString()
-            targetCompatibility = JavaVersion.VERSION_17.toString()
-        }
+    // Configure JavaCompile tasks directly at configuration time
+    // instead of using afterEvaluate, to avoid Gradle 8+ restrictions.
+    tasks.withType<JavaCompile>().configureEach {
+        sourceCompatibility = JavaVersion.VERSION_17.toString()
+        targetCompatibility = JavaVersion.VERSION_17.toString()
     }
 }
 
