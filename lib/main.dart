@@ -8,6 +8,7 @@ import 'package:voyage/app_env.dart';
 import 'package:voyage/app_router.dart';
 import 'package:voyage/core/app_provider_observer.dart';
 import 'package:voyage/core/theme/app_theme.dart';
+import 'package:voyage/backend/policy_config_api.dart';
 import 'package:voyage/feature_flags.dart';
 import 'package:voyage/notifications/fcm_push_handler.dart';
 import 'package:voyage/notifications/local_notification_service.dart';
@@ -51,6 +52,7 @@ Future<void> main() async {
   );
 
   FF.initForEnv();
+  await _maybeFetchRemotePolicyConfig();
   PttPushHandler.init();
   await LocalNotificationService.initialize();
   await FcmPushHandler.init();
@@ -65,6 +67,44 @@ Future<void> main() async {
       child: const VoyageApp(),
     ),
   );
+}
+
+Future<void> _maybeFetchRemotePolicyConfig() async {
+  const String enabledRaw = String.fromEnvironment(
+    'ENABLE_REMOTE_POLICY',
+    defaultValue: 'false',
+  );
+  if (enabledRaw.toLowerCase() != 'true') {
+    return;
+  }
+
+  try {
+    final api = PolicyConfigApi();
+    final result = await api.fetchPolicy(AppEnv.current);
+    final error = result.error;
+    if (error != null) {
+      debugPrint(
+        '[PolicyConfig] fetch error: '
+        'type=${error.type.name} code=${error.code ?? 'null'} '
+        'status=${error.statusCode?.toString() ?? 'null'}',
+      );
+      return;
+    }
+    final config = result.data;
+    if (config == null) {
+      debugPrint('[PolicyConfig] empty config from backend');
+      return;
+    }
+    FF.applyPolicy(config);
+    debugPrint(
+      '[PolicyConfig] applied remote policy for env=${AppEnv.currentName}',
+    );
+  } catch (e, st) {
+    debugPrint(
+      '[PolicyConfig] unexpected error: $e',
+    );
+    debugPrint(st.toString());
+  }
 }
 
 class VoyageApp extends ConsumerStatefulWidget {

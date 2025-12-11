@@ -6,8 +6,9 @@
 // 자동 재생 여부를 결정한다. 실제 음성 데이터 전송은 아직 Noop일 수 있다.
 
 import 'package:flutter/services.dart';
-import 'package:voyage/app_router.dart';
 import 'package:voyage/feature_flags.dart';
+import 'package:voyage/app_router.dart';
+import 'package:voyage/ptt_auto_play_target.dart';
 
 const MethodChannel _pttPushChannel = MethodChannel('mjtalk.ptt.push');
 
@@ -70,14 +71,19 @@ class PttPushHandler {
       router.go('/chat/$friendId');
 
       // iOS A안: APNs → 탭 → 포그라운드 → 재생.
+      //
+      // 실제 오디오 경로는 ChatRepository/ChatMessagesNotifier를 통해
+      // 로딩되므로, 여기서는 friendId/messageId만 글로벌 타깃으로
+      // 등록하고, ChatPage가 해당 타깃을 소비해 자동 재생을 수행한다.
       final isWalkie = pttMode == 'walkie';
       if (isWalkie && FF.iosModeA_PushTapPlay) {
-        // TODO: 실제 음성 데이터가 준비되면 여기에서
-        // PttController의 재생 API를 호출해 자동 재생을 연결한다.
-        // 현재는 설계도 요구에 맞춰 메타데이터 로그만 남긴다.
+        PttAutoPlayRegistry.setTarget(
+          friendId: friendId,
+          messageId: messageId,
+        );
         // ignore: avoid_print
         print(
-          '[PTT][Push][iOS] auto-play candidate '
+          '[PTT][Push][iOS] auto-play target set '
           'friendId=$friendId messageId=${messageId ?? '(none)'}',
         );
       }

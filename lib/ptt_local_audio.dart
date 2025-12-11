@@ -195,10 +195,14 @@ class PttLocalAudioEngine {
           path.startsWith('http://') ||
               path.startsWith('https://');
       if (isRemote) {
-        debugPrint('[AudioPlayer] play url=$path');
+        debugPrint(
+          '[AudioPlayer] play url (hash=${path.hashCode})',
+        );
         await _player.setUrl(path);
       } else {
-        debugPrint('[AudioPlayer] play file=$path');
+        debugPrint(
+          '[AudioPlayer] play file (hash=${path.hashCode})',
+        );
         await _player.setFilePath(path);
       }
       _lastPlaybackDuration = _player.duration;

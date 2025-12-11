@@ -10,6 +10,7 @@ import 'package:voyage/core/theme/app_colors.dart';
 import 'package:voyage/feature_flags.dart';
 import 'package:voyage/friend_state.dart';
 import 'package:voyage/ptt/ptt_mode_provider.dart';
+import 'package:voyage/ptt_auto_play_target.dart';
 import 'package:voyage/ptt_debug_log.dart';
 
 final _chatControllers = <String, TextEditingController>{};
@@ -65,8 +66,112 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final notifier = ref.read(chatMessagesProvider.notifier);
     notifier.loadInitialMessages(widget.chatId);
     notifier.startWatching(widget.chatId);
+  }
+
+  @override
+  void dispose() {
+    ref.read(chatMessagesProvider.notifier).stopWatching();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final chatId = widget.chatId;
+    final PttChatRouteArgs? args = widget.pttArgs;
+
+    // 상태 변경 시 재빌드를 위해 watch.
+    ref.watch(chatMessagesProvider);
+    final currentPlayingMessageId =
+        ref.watch(currentPlayingVoiceMessageIdProvider);
+    final errorMessageIds =
+        ref.watch(voicePlaybackErrorMessageIdsProvider);
+    final notifier = ref.read(chatMessagesProvider.notifier);
+    final List<ChatMessage> messages =
+        notifier.messagesForChat(chatId).reversed.toList();
+    notifier.markAllAsSeen(chatId);
+
+    final friends = ref.watch(friendListProvider);
+    final mode = ref.watch(pttModeProvider);
+    final allowMap = ref.watch(friendPttAllowProvider);
+    final blockMap = ref.watch(friendBlockProvider);
+
+    String? friendName;
+    final matches =
+        friends.where((friend) => friend.id == chatId);
+    if (matches.isNotEmpty) {
+      friendName = matches.first.name;
+    }
+
+    final effectiveFriendName =
+        args?.friendName ?? friendName ?? chatId;
+    final bool isWalkieAllowedByArgs =
+        args?.isWalkieAllowed ?? false;
+    final bool isWalkieAllowedByState =
+        (allowMap[chatId] ?? false) && !(blockMap[chatId] ?? false);
+    final bool isWalkieAllowed =
+        isWalkieAllowedByArgs || isWalkieAllowedByState;
+
+    // iOS A안(APNs → 탭 → 포그라운드 → 재생)에서 설정된
+    // 글로벌 자동 재생 타깃이 있다면 한 번만 소비해 재생을 시도한다.
+    final PttAutoPlayTarget? autoPlayTarget =
+        PttAutoPlayRegistry.takeIfMatches(chatId);
+    if (autoPlayTarget != null &&
+        mode == PttMode.walkie &&
+        isWalkieAllowedByState) {
+      final String? targetMessageId =
+          autoPlayTarget.messageId;
+      ChatMessage? targetMessage;
+      if (targetMessageId != null) {
+        for (final ChatMessage m in messages) {
+          if (m.id == targetMessageId) {
+            targetMessage = m;
+            break;
+          }
+        }
+      }
+      targetMessage ??= messages.firstWhere(
+        (m) =>
+            m.chatId == chatId &&
+            !m.fromMe &&
+            m.type == ChatMessageType.voice &&
+            (m.audioPath ?? '').isNotEmpty,
+        orElse: () => ChatMessage(
+          id: '',
+          chatId: '',
+          text: null,
+          fromMe: false,
+          createdAt: DateTime.fromMillisecondsSinceEpoch(0),
+          seenBy: <String, DateTime>{},
+        ),
+      );
+
+      if (targetMessage.id.isNotEmpty &&
+          (targetMessage.audioPath ?? '').isNotEmpty &&
+          !_autoPlayedMessageIds.contains(targetMessage.id)) {
+        final String path = targetMessage.audioPath!;
+        _autoPlayedMessageIds.add(targetMessage.id);
+        PttLogger.log(
+          '[PTT-AutoPlay]',
+          'push auto-play',
+          meta: <String, Object?>{
+            'chatId': chatId,
+            'messageId': targetMessage.id,
+          },
+        );
+        // fire-and-forget; 에러는 내부에서 로그만 남긴다.
+        final player = ref.read(chatVoicePlayerProvider);
+        // ignore: unawaited_futures
+        player.togglePlay(
+          path: path,
+          messageId: targetMessage.id,
+        );
+      }
+    }
 
     // 자동 재생 – Walkie 모드에서만 동작.
+    //
+    // ref.listen은 ConsumerState.build 안에서만 사용하는 것이
+    // Riverpod 2.x 규칙이므로, 자동 재생 로직도 여기에서 구독한다.
     ref.listen<List<ChatMessage>>(
       chatMessagesProvider,
       (previous, next) async {
@@ -79,12 +184,18 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           return;
         }
 
-        final mode = ref.read(pttModeProvider);
-        if (mode != PttMode.walkie) {
+        final currentMode = ref.read(pttModeProvider);
+        if (currentMode != PttMode.walkie) {
           return;
         }
 
-        final String chatId = widget.chatId;
+        // 친구별 무전 허용/차단 정책에 따라 자동 재생 여부를 결정한다.
+        final bool friendAllowed =
+            (allowMap[chatId] ?? false) && !(blockMap[chatId] ?? false);
+        if (!friendAllowed) {
+          return;
+        }
+
         final List<ChatMessage> prevForChat =
             previous
                 .where((m) => m.chatId == chatId)
@@ -152,42 +263,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         }
       },
     );
-  }
-
-  @override
-  void dispose() {
-    ref.read(chatMessagesProvider.notifier).stopWatching();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final chatId = widget.chatId;
-    final PttChatRouteArgs? args = widget.pttArgs;
-
-    // 상태 변경 시 재빌드를 위해 watch.
-    ref.watch(chatMessagesProvider);
-    final currentPlayingMessageId =
-        ref.watch(currentPlayingVoiceMessageIdProvider);
-    final errorMessageIds =
-        ref.watch(voicePlaybackErrorMessageIdsProvider);
-    final notifier = ref.read(chatMessagesProvider.notifier);
-    final List<ChatMessage> messages =
-        notifier.messagesForChat(chatId).reversed.toList();
-    notifier.markAllAsSeen(chatId);
-
-    final mode = ref.watch(pttModeProvider);
-    final friends = ref.watch(friendListProvider);
-    String? friendName;
-    final matches =
-        friends.where((friend) => friend.id == chatId);
-    if (matches.isNotEmpty) {
-      friendName = matches.first.name;
-    }
-
-    final effectiveFriendName =
-        args?.friendName ?? friendName ?? chatId;
-    final isWalkieAllowed = args?.isWalkieAllowed ?? false;
 
     String modeSubtitle;
     if (mode == PttMode.walkie) {
@@ -424,7 +499,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                   .labelSmall
                                   ?.copyWith(
                                     color: textColor
-                                        .withOpacity(0.6),
+                                        .withValues(alpha: 0.6),
                                   ),
                             ),
                           ],

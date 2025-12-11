@@ -476,7 +476,7 @@ class RealChatApi implements ChatApi {
     if (!exists) {
       debugPrint(
         '[FirestoreChatRepository] sendVoice upload error: '
-        'local file not found path=$localPath',
+        'local file not found (path hash=${localPath.hashCode})',
       );
       return ApiResult<ChatMessage>.failure(
         const ApiError(
@@ -493,7 +493,7 @@ class RealChatApi implements ChatApi {
       final docRef = collection.doc();
       debugPrint(
         '[FirestoreChatRepository] sendVoice upload start '
-        'chatId=$chatId path=$localPath',
+        'chatId=$chatId localPathHash=${localPath.hashCode}',
       );
 
       String downloadUrl;
@@ -509,7 +509,7 @@ class RealChatApi implements ChatApi {
         downloadUrl = await ref.getDownloadURL();
         debugPrint(
           '[FirestoreChatRepository] sendVoice upload success '
-          'chatId=$chatId url=$downloadUrl',
+          'chatId=$chatId downloadUrlHash=${downloadUrl.hashCode}',
         );
       } catch (e, st) {
         debugPrint(
