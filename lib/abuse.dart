@@ -40,7 +40,8 @@ class AbuseApiClient {
         'reason': report.reason.name,
       },
     );
-    // TODO: 실제 서버 연동을 추가한다 (HTTP API 등).
+    // TODO(ASK_SUPERVISOR): 실제 신고 수집용 서버 URL/계약이 결정되면
+    // 여기에 HTTP API 연동을 추가한다.
   }
 }
 

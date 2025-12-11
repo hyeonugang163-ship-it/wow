@@ -331,8 +331,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   final hasPlaybackError =
                       errorMessageIds
                           .contains(message.id);
+                  final bool isSendFailed =
+                      message.sendStatus ==
+                          MessageSendStatus.failed;
                   final isError =
-                      hasPlaybackError || !hasAudioPath;
+                      hasPlaybackError ||
+                          (!hasAudioPath && !isSendFailed);
 
                   String primaryLabel;
                   if (isError) {
@@ -353,7 +357,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
                   final colorScheme =
                       Theme.of(context).colorScheme;
-                  final bubbleColor = isError
+                  final bubbleColor = (isError || isSendFailed)
                       ? colorScheme.errorContainer
                       : isMe
                           ? AppColors.chatBubbleMe
@@ -361,7 +365,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
                   IconData iconData;
                   Color? iconColor;
-                  if (isError) {
+                  if (isSendFailed) {
+                    iconData = Icons.refresh;
+                    iconColor = colorScheme.error;
+                  } else if (isError) {
                     iconData = Icons.error_outline;
                     iconColor = colorScheme.error;
                   } else if (isPlaying) {
@@ -372,16 +379,27 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     iconColor = colorScheme.onPrimary;
                   }
 
+                  final String? statusText =
+                      _statusTextForMessage(message, chatId);
+
                   return Align(
                     alignment: alignment,
                     child: GestureDetector(
                       onTap: () async {
+                        if (isSendFailed) {
+                          await ref
+                              .read(chatMessagesProvider.notifier)
+                              .retryVoiceMessage(message.id);
+                          return;
+                        }
                         if (hasPlaybackError) {
                           debugPrint(
                             '[Chat] voice message tap ignored in error state '
                             '(messageId=${message.id})',
                           );
-                          // TODO: allow retry from error state on tap.
+                          // TODO(LATER_MVP2): 오류 상태 버블 탭 시
+                          // 경로 재계산 또는 재다운로드를 시도하는
+                          // 재생 재시도 UX를 추가할 수 있다.
                           return;
                         }
                         if (!hasAudioPath) {
@@ -419,44 +437,51 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                           borderRadius:
                               BorderRadius.circular(20),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              iconData,
-                              size: 20,
-                              color: iconColor,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(primaryLabel),
-                            if (durationText != null) ...[
-                              const SizedBox(width: 8),
-                              Text(
-                                durationText,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall,
-                              ),
-                            ],
-                          ],
-                        ),
+	                        child: Column(
+	                          mainAxisSize: MainAxisSize.min,
+	                          crossAxisAlignment:
+	                              CrossAxisAlignment.end,
+	                          children: [
+	                            Row(
+	                              mainAxisSize: MainAxisSize.min,
+	                              children: [
+	                                Icon(
+	                                  iconData,
+	                                  size: 20,
+	                                  color: iconColor,
+	                                ),
+	                                const SizedBox(width: 6),
+	                                Text(primaryLabel),
+	                                if (durationText != null) ...[
+	                                  const SizedBox(width: 8),
+	                                  Text(
+	                                    durationText,
+	                                    style: Theme.of(context)
+	                                        .textTheme
+	                                        .bodySmall,
+	                                  ),
+	                                ],
+	                              ],
+	                            ),
+	                            if (statusText != null) ...[
+	                              const SizedBox(height: 2),
+	                              Text(
+	                                statusText,
+	                                style: Theme.of(context)
+	                                    .textTheme
+	                                    .labelSmall,
+	                              ),
+	                            ],
+	                          ],
+	                        ),
                       ),
                     ),
                   );
                 } else {
                   final textColor =
                       AppColors.textPrimary;
-                  String? statusText;
-                  if (isMe) {
-                    // 1:1 채팅 가정: chatId를 상대 uid로 사용.
-                    final String otherUid = chatId;
-                    final bool isSeenByOther =
-                        message.isSeenBy(otherUid);
-                    statusText =
-                        isSeenByOther ? '읽음' : '전송됨';
-                  } else {
-                    statusText = null;
-                  }
+                  final String? statusText =
+                      _statusTextForMessage(message, chatId);
 
                   return Align(
                     alignment: alignment,
@@ -570,5 +595,31 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         ],
       ),
     );
+  }
+
+  String? _statusTextForMessage(
+    ChatMessage message,
+    String chatId,
+  ) {
+    if (!message.fromMe) {
+      return null;
+    }
+
+    if (message.type == ChatMessageType.voice) {
+      switch (message.sendStatus) {
+        case MessageSendStatus.sending:
+          return '전송 중…';
+        case MessageSendStatus.failed:
+          return '전송 실패 · 탭하여 재전송';
+        case MessageSendStatus.sent:
+          final bool isSeenByOther =
+              message.isSeenBy(chatId);
+          return isSeenByOther ? '읽음' : '전송됨';
+      }
+    }
+
+    final bool isSeenByOther =
+        message.isSeenBy(chatId);
+    return isSeenByOther ? '읽음' : '전송됨';
   }
 }

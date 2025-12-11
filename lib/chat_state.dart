@@ -160,6 +160,7 @@ class ChatMessagesNotifier extends StateNotifier<List<ChatMessage>> {
       fromMe: fromMe,
       createdAt: now,
       durationMillis: durationMillis,
+      sendStatus: MessageSendStatus.sending,
     );
     state = [...state, message];
 
@@ -184,19 +185,39 @@ class ChatMessagesNotifier extends StateNotifier<List<ChatMessage>> {
         },
       );
     }
-    _repository
-        .sendVoice(chatId, audioPath, safeDurationMillis)
-        .catchError((Object error, StackTrace stackTrace) {
-      PttLogger.log(
-        '[Chat][State]',
-        'sendVoice failed',
-        meta: <String, Object?>{
-          'chatId': chatId,
-          'error': error.toString(),
-        },
-      );
-      return message;
-    });
+
+    () async {
+      try {
+        final ChatMessage remote =
+            await _repository.sendVoice(
+          chatId,
+          audioPath,
+          safeDurationMillis,
+        );
+
+        // 업로드/전송 성공: sendStatus를 sent로, audioPath/길이를
+        // 백엔드 기준으로 한 번 더 업데이트해 둔다.
+        _updateVoiceMessageOnSendSuccess(
+          localMessageId: message.id,
+          remote: remote,
+        );
+      } catch (error, stackTrace) {
+        PttLogger.log(
+          '[Chat][State]',
+          'sendVoice failed',
+          meta: <String, Object?>{
+            'chatId': chatId,
+            'error': error.toString(),
+          },
+        );
+        _updateVoiceMessageSendStatus(
+          message.id,
+          MessageSendStatus.failed,
+        );
+        // ignore: avoid_print
+        print(stackTrace.toString());
+      }
+    }();
   }
 
   void updateVoiceMessageDuration({
@@ -214,6 +235,7 @@ class ChatMessagesNotifier extends StateNotifier<List<ChatMessage>> {
           text: message.text,
           fromMe: message.fromMe,
           createdAt: message.createdAt,
+          sendStatus: message.sendStatus,
           type: message.type,
           audioPath: message.audioPath,
           durationMillis: durationMillis,
@@ -268,6 +290,7 @@ class ChatMessagesNotifier extends StateNotifier<List<ChatMessage>> {
           text: message.text,
           fromMe: message.fromMe,
           createdAt: message.createdAt,
+          sendStatus: message.sendStatus,
           type: message.type,
           audioPath: message.audioPath,
           durationMillis: message.durationMillis,
@@ -318,6 +341,121 @@ class ChatMessagesNotifier extends StateNotifier<List<ChatMessage>> {
 
   int unreadCountForChat(String chatId) {
     return getUnreadMessagesForCurrentUser(chatId).length;
+  }
+
+  void _updateVoiceMessageSendStatus(
+    String messageId,
+    MessageSendStatus status,
+  ) {
+    state = state.map((message) {
+      if (message.id == messageId &&
+          message.type == ChatMessageType.voice) {
+        return ChatMessage(
+          id: message.id,
+          chatId: message.chatId,
+          text: message.text,
+          fromMe: message.fromMe,
+          createdAt: message.createdAt,
+          sendStatus: status,
+          type: message.type,
+          audioPath: message.audioPath,
+          durationMillis: message.durationMillis,
+          fromUid: message.fromUid,
+          seenAt: message.seenAt,
+          seenBy: message.seenBy,
+        );
+      }
+      return message;
+    }).toList(growable: false);
+  }
+
+  void _updateVoiceMessageOnSendSuccess({
+    required String localMessageId,
+    required ChatMessage remote,
+  }) {
+    state = state.map((message) {
+      if (message.id == localMessageId &&
+          message.type == ChatMessageType.voice) {
+        return ChatMessage(
+          id: message.id,
+          chatId: message.chatId,
+          text: message.text,
+          fromMe: message.fromMe,
+          createdAt: message.createdAt,
+          sendStatus: MessageSendStatus.sent,
+          type: message.type,
+          audioPath:
+              remote.audioPath ?? message.audioPath,
+          durationMillis:
+              remote.durationMillis ?? message.durationMillis,
+          fromUid: message.fromUid,
+          seenAt: message.seenAt,
+          seenBy: message.seenBy,
+        );
+      }
+      return message;
+    }).toList(growable: false);
+  }
+
+  Future<void> retryVoiceMessage(String messageId) async {
+    ChatMessage? target;
+    for (final ChatMessage m in state) {
+      if (m.id == messageId &&
+          m.type == ChatMessageType.voice) {
+        target = m;
+        break;
+      }
+    }
+    if (target == null) {
+      return;
+    }
+    final String? path = target.audioPath;
+    if (path == null || path.isEmpty) {
+      PttLogger.log(
+        '[Chat][State]',
+        'retryVoiceMessage skipped: no audioPath',
+        meta: <String, Object?>{
+          'messageId': messageId,
+        },
+      );
+      return;
+    }
+
+    final int duration =
+        target.durationMillis ?? 0;
+
+    _updateVoiceMessageSendStatus(
+      messageId,
+      MessageSendStatus.sending,
+    );
+
+    try {
+      final ChatMessage remote =
+          await _repository.sendVoice(
+        target.chatId,
+        path,
+        duration,
+      );
+      _updateVoiceMessageOnSendSuccess(
+        localMessageId: messageId,
+        remote: remote,
+      );
+    } catch (error, stackTrace) {
+      _updateVoiceMessageSendStatus(
+        messageId,
+        MessageSendStatus.failed,
+      );
+      PttLogger.log(
+        '[Chat][State]',
+        'retryVoiceMessage failed',
+        meta: <String, Object?>{
+          'messageId': messageId,
+          'error': error.toString(),
+        },
+      );
+      // ignore: avoid_print
+      print(stackTrace.toString());
+    }
   }
 
   @override

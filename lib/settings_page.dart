@@ -6,6 +6,7 @@ import 'package:voyage/auth/auth_state_notifier.dart';
 import 'package:voyage/feature_flags.dart';
 import 'package:voyage/ptt/ptt_user_prefs.dart';
 import 'package:voyage/ptt/ptt_mode_provider.dart';
+import 'package:voyage/ptt_debug_log.dart';
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -15,6 +16,10 @@ class SettingsPage extends ConsumerWidget {
     final beepOnStart = ref.watch(pttBeepOnStartProvider);
     final beepOnEnd = ref.watch(pttBeepOnEndProvider);
     final vibrateInWalkie = ref.watch(pttVibrateInWalkieProvider);
+    final debugOverlayEnabled =
+        ref.watch(pttDebugOverlayEnabledProvider);
+    final verboseLoggingEnabled =
+        ref.watch(pttVerboseLoggingEnabledProvider);
     final mode = ref.watch(pttModeProvider);
     final env = AppEnv.current;
 
@@ -193,6 +198,35 @@ class SettingsPage extends ConsumerWidget {
                       ),
                     ),
                     const Divider(height: 1),
+                    SwitchListTile(
+                      title: const Text('PTT 디버그 오버레이 표시'),
+                      subtitle: const Text(
+                        '현재 PTT 모드/친구/최근 로그를 화면 우측 하단에 표시합니다.',
+                      ),
+                      value: debugOverlayEnabled,
+                      onChanged: (value) {
+                        ref
+                            .read(
+                              pttDebugOverlayEnabledProvider.notifier,
+                            )
+                            .state = value;
+                      },
+                    ),
+                    SwitchListTile(
+                      title: const Text('콘솔 PTT 로그 상세 출력'),
+                      subtitle: const Text(
+                        '끄면 내부 버퍼/디버그 화면에는 남기되, 터미널 콘솔 출력은 최소화합니다.',
+                      ),
+                      value: verboseLoggingEnabled,
+                      onChanged: (value) {
+                        ref
+                            .read(
+                              pttVerboseLoggingEnabledProvider.notifier,
+                            )
+                            .state = value;
+                        PttLogger.setConsoleVerbose(value);
+                      },
+                    ),
                     SwitchListTile(
                       title: const Text('PTT 시작 전 짧은 비프음 재생'),
                       value: beepOnStart,

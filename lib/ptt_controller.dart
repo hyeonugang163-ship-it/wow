@@ -196,7 +196,7 @@ class PttController {
       StateNotifierProvider<PttControllerNotifier, PttTalkState>(
   (ref) {
     final localAudio = ref.read(pttLocalAudioEngineProvider);
-    // TODO: 실제 사용자 ID를 가져오는 상태가 생기면 대체한다.
+    // TODO(LATER_MVP2): 실제 사용자 ID 상태가 생기면 PttSessionConfig에 주입한다.
     const localUserId = 'me';
     return PttControllerNotifier(
       ref,
@@ -389,7 +389,8 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
               windowSeconds: windowSeconds,
             ),
           );
-      // TODO: hard block or soft warn on too many PTT in short time.
+      // TODO(LATER_MVP2): 짧은 시간 내 과도한 무전 시
+      // 하드 블록 또는 추가 경고 UI를 도입할지 검토한다.
     }
 
     if (requestedMode == PttMode.manner) {
@@ -523,8 +524,8 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
       },
     );
 
-    // 매너모드가 아니거나, 대상/녹음 경로가 없으면 아무 것도 하지 않는다.
-    if (mode != PttMode.manner || targetFriendId == null || path == null) {
+    // 대상/녹음 경로가 없으면 아무 것도 하지 않는다.
+    if (targetFriendId == null || path == null) {
       return;
     }
 
@@ -585,26 +586,34 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
       }
 
       final String uploadPath = path;
-      _ref
-          .read(pttMediaRepositoryProvider)
-          .uploadVoice(
-            uploadPath,
-            chatId: targetFriendId,
-            friendId: targetFriendId,
-          )
-          .catchError((Object error, StackTrace stackTrace) {
-        PttLogger.log(
-          '[PTT][Manner][uploadVoice]',
-          'upload failed',
-          meta: <String, Object?>{
-            'targetFriendId': targetFriendId,
-            'error': error.toString(),
-          },
-        );
-        return uploadPath;
-      });
 
-      // 매너모드: 방금 녹음한 음성을 음성 메시지(voice)로 채팅에 저장한다.
+      // 매너모드: 별도의 미디어 저장소 업로드(예: S3/Cloud Storage)를 수행한다.
+      // Walkie 모드에서는 실시간 PTT 채널과의 정합성을 위해
+      // ChatMessagesNotifier 경로만 사용하고, 여기서는 업로드하지 않는다.
+      if (mode == PttMode.manner) {
+        _ref
+            .read(pttMediaRepositoryProvider)
+            .uploadVoice(
+              uploadPath,
+              chatId: targetFriendId,
+              friendId: targetFriendId,
+            )
+            .catchError((Object error, StackTrace stackTrace) {
+          PttLogger.log(
+            '[PTT][Manner][uploadVoice]',
+            'upload failed',
+            meta: <String, Object?>{
+              'targetFriendId': targetFriendId,
+              'error': error.toString(),
+            },
+          );
+          return uploadPath;
+        });
+      }
+
+      // Walkie / Manner 공통:
+      // 방금 녹음한 음성을 음성 메시지(voice)로 채팅에 저장하고,
+      // ChatRepository가 업로드/전송 성공 여부를 sendStatus로 관리한다.
       _ref.read(chatMessagesProvider.notifier).addVoiceMessage(
             chatId: targetFriendId,
             audioPath: uploadPath,

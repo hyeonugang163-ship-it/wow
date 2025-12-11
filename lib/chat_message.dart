@@ -5,6 +5,17 @@ enum ChatMessageType {
   voice,
 }
 
+/// Send status for messages where the client initiates an upload/send.
+///
+/// - sending: 로컬에만 존재, 백엔드 업로드/전송 시도 중
+/// - sent   : 백엔드까지 성공적으로 전송 완료
+/// - failed : 업로드/전송 실패 (재전송 가능)
+enum MessageSendStatus {
+  sending,
+  sent,
+  failed,
+}
+
 class ChatMessage {
   ChatMessage({
     required this.id,
@@ -12,6 +23,7 @@ class ChatMessage {
     this.text,
     required this.fromMe,
     required this.createdAt,
+    this.sendStatus = MessageSendStatus.sent,
     this.type = ChatMessageType.text,
     this.audioPath,
     this.durationMillis,
@@ -31,6 +43,7 @@ class ChatMessage {
 
   final bool fromMe;
   final DateTime createdAt;
+  final MessageSendStatus sendStatus;
   final String? fromUid;
   final DateTime? seenAt;
   final Map<String, DateTime> seenBy;
@@ -51,6 +64,7 @@ class ChatMessage {
     bool fromMe = true,
     DateTime? createdAt,
     int? durationMillis,
+    MessageSendStatus sendStatus = MessageSendStatus.sent,
   }) {
     return ChatMessage(
       id: id,
@@ -58,6 +72,7 @@ class ChatMessage {
       text: null,
       fromMe: fromMe,
       createdAt: createdAt ?? DateTime.now(),
+      sendStatus: sendStatus,
       type: ChatMessageType.voice,
       audioPath: audioPath,
       durationMillis: durationMillis,
@@ -74,6 +89,7 @@ class ChatMessage {
       'audioPath': audioPath,
       'durationMillis': durationMillis,
       'fromMe': fromMe,
+      'sendStatus': sendStatus.name,
       'fromUid': fromUid,
       'createdAt': createdAt.toIso8601String(),
       'seenAt': seenAt?.toIso8601String(),
@@ -89,6 +105,15 @@ class ChatMessage {
     final messageType = typeString == 'voice'
         ? ChatMessageType.voice
         : ChatMessageType.text;
+
+    final String? sendStatusRaw =
+        json['sendStatus'] as String?;
+    final MessageSendStatus sendStatus =
+        MessageSendStatus.values.firstWhere(
+      (MessageSendStatus value) =>
+          value.name == sendStatusRaw,
+      orElse: () => MessageSendStatus.sent,
+    );
 
     final Map<String, DateTime> seenBy;
     final dynamic seenByRaw = json['seenBy'];
@@ -113,6 +138,7 @@ class ChatMessage {
       fromMe: json['fromMe'] as bool? ?? false,
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
           DateTime.now(),
+      sendStatus: sendStatus,
       fromUid: json['fromUid'] as String?,
       seenAt: DateTime.tryParse(json['seenAt'] as String? ?? ''),
       type: messageType,

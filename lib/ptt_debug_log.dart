@@ -97,6 +97,16 @@ class PttLogger {
 
   static PttLogSink? _sink;
 
+   /// Controls whether logs are printed to the console in debug builds.
+   ///
+   /// - true  : 모든 PTT 로그를 debugPrint로 출력
+   /// - false : 콘솔에는 출력하지 않고, 내부 버퍼/오버레이에서만 확인
+   static bool _consoleVerbose = true;
+
+   static void setConsoleVerbose(bool enabled) {
+     _consoleVerbose = enabled;
+   }
+
   static void attachSink(PttLogSink sink) {
     _sink = sink;
   }
@@ -126,7 +136,7 @@ class PttLogger {
   }
 
   static void _logToConsole(PttDebugLogEntry entry) {
-    if (!kDebugMode) {
+    if (!kDebugMode || !_consoleVerbose) {
       return;
     }
     if (entry.meta.isEmpty) {

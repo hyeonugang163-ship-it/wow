@@ -236,6 +236,8 @@ class _PttHomePageState extends ConsumerState<PttHomePage> {
     final friends = ref.watch(friendListProvider);
     final pttAllowMap = ref.watch(friendPttAllowProvider);
     final blockMap = ref.watch(friendBlockProvider);
+    final debugOverlayEnabled =
+        ref.watch(pttDebugOverlayEnabledProvider);
 
     final currentFriend = currentFriendId == null
         ? null
@@ -275,6 +277,8 @@ class _PttHomePageState extends ConsumerState<PttHomePage> {
     final bool isFriendBlocked = friendBlocked;
     final bool isWalkieAllowed =
         friendAllowed && !friendBlocked;
+    final bool showDebugOverlay =
+        _showDebugOverlay || debugOverlayEnabled;
 
     return Scaffold(
       appBar: AppBar(
@@ -533,7 +537,7 @@ class _PttHomePageState extends ConsumerState<PttHomePage> {
               ],
             ),
           ),
-          if (_showDebugOverlay) const PttDebugOverlay(),
+          if (showDebugOverlay) const PttDebugOverlay(),
         ],
       ),
     );

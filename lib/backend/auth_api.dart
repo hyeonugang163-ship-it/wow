@@ -83,20 +83,22 @@ class RealAuthApi implements AuthApi {
     http.Client? httpClient,
     Uri? baseUri,
   })  : _client = httpClient ?? http.Client(),
-        // TODO: Replace with actual auth API base URL
-        // (e.g. "https://api.example.com/").
+        // TODO(ASK_SUPERVISOR): 실제 auth API base URL
+        // (예: "https://api.example.com") 확정 후 교체한다.
         _baseUri = baseUri ?? Uri.parse('https://example.com/');
 
   final http.Client _client;
   final Uri _baseUri;
 
   Uri _buildLoginUri() {
-    // TODO: Replace with the actual login path (e.g. "/v1/auth/login").
+    // TODO(ASK_SUPERVISOR): 실제 로그인 엔드포인트 경로
+    // (예: "/v1/auth/login")를 확인해 교체한다.
     return _baseUri.resolve('api/auth/login');
   }
 
   Uri _buildRefreshUri() {
-    // TODO: Replace with the actual refresh path (e.g. "/v1/auth/refresh").
+    // TODO(ASK_SUPERVISOR): 실제 토큰 갱신 엔드포인트 경로
+    // (예: "/v1/auth/refresh")를 확인해 교체한다.
     return _baseUri.resolve('api/auth/refresh');
   }
 
@@ -145,7 +147,8 @@ class RealAuthApi implements AuthApi {
   }
 
   AuthSession _parseSession(Map<String, dynamic> json) {
-    // TODO: Align these field names with the real backend contract.
+    // TODO(ASK_SUPERVISOR): 실제 백엔드 응답 필드 이름과
+    // userId/accessToken/refreshToken/expiresAt 매핑을 정밀히 맞춘다.
     final String? userId = json['userId'] as String?;
     final String? accessToken = json['accessToken'] as String?;
     final String? refreshToken = json['refreshToken'] as String?;
@@ -162,7 +165,8 @@ class RealAuthApi implements AuthApi {
 
     DateTime expiresAt;
     try {
-      // TODO: Adjust parsing if backend uses numeric timestamps instead.
+      // TODO(LATER_MVP2): 백엔드가 epoch millis 등 숫자 타임스탬프를
+      // 사용할 경우 파싱 로직을 조정한다.
       expiresAt = DateTime.parse(expiresAtRaw);
     } catch (_) {
       // If parsing fails, fall back to a short-lived session.
@@ -195,10 +199,11 @@ class RealAuthApi implements AuthApi {
             uri,
             headers: <String, String>{
               'Content-Type': 'application/json',
-              // TODO: Add authorization headers if needed.
+              // TODO(ASK_SUPERVISOR): 필요 시 Authorization 헤더 포맷을 정의하고 추가한다.
             },
             body: jsonEncode(<String, Object?>{
-              // TODO: Replace "deviceId" with the field name expected by backend.
+              // TODO(ASK_SUPERVISOR): 백엔드에서 요구하는 디바이스 식별자
+              // 필드 이름으로 "deviceId" 키를 조정한다.
               'deviceId': deviceId,
             }),
           )
@@ -333,10 +338,10 @@ class RealAuthApi implements AuthApi {
             uri,
             headers: <String, String>{
               'Content-Type': 'application/json',
-              // TODO: Add authorization headers if needed.
+              // TODO(ASK_SUPERVISOR): 필요 시 Authorization 헤더 포맷을 정의하고 추가한다.
             },
             body: jsonEncode(<String, Object?>{
-              // TODO: Replace "refreshToken" with field name expected by backend.
+              // TODO(ASK_SUPERVISOR): 백엔드 계약에 맞게 "refreshToken" 키를 조정한다.
               'refreshToken': refreshToken,
             }),
           )

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:voyage/app_router.dart';
 import 'package:voyage/feature_flags.dart';
@@ -52,6 +53,8 @@ Future<ChatNotificationStyle>
 Future<void> firebaseMessagingBackgroundHandler(
   RemoteMessage message,
 ) async {
+  debugPrint('[Push] onBackgroundMessage data=${message.data}');
+
   // NOTE: Background isolate에서는 Firebase를 다시 초기화해야 한다.
   try {
     await Firebase.initializeApp();
@@ -119,6 +122,19 @@ class FcmPushHandler {
       },
     );
 
+    // 앱 실행 시점에 디버그 로그로 FCM 토큰을 한 번 남겨둔다.
+    try {
+      final String? token = await messaging.getToken();
+      if (token != null) {
+        debugPrint('[FCM] token=$token');
+      } else {
+        debugPrint('[FCM] token is null');
+      }
+    } catch (e, st) {
+      debugPrint('[FCM] getToken error: $e');
+      debugPrint(st.toString());
+    }
+
     FirebaseMessaging.onMessage.listen(_handleOnMessage);
     FirebaseMessaging.onMessageOpenedApp.listen(
       _handleOnMessageOpenedApp,
@@ -136,6 +152,8 @@ class FcmPushHandler {
   static Future<void> _handleOnMessage(
     RemoteMessage message,
   ) async {
+    debugPrint('[Push] onMessage data=${message.data}');
+
     final PushPayload payload =
         PushPayload.fromRemoteMessage(message);
     if (!payload.isValid) {
@@ -161,6 +179,10 @@ class FcmPushHandler {
   static void _handleOnMessageOpenedApp(
     RemoteMessage message,
   ) {
+    debugPrint(
+      '[Push] onMessageOpenedApp data=${message.data}',
+    );
+
     final PushPayload payload =
         PushPayload.fromRemoteMessage(message);
     _handleNavigation(payload);

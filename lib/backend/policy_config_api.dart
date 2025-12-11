@@ -31,8 +31,8 @@ class PolicyConfigApi {
   }
 
   Uri _buildPolicyUri(AppEnvironment env) {
-    // TODO: Replace with the actual policy endpoint path and query
-    // parameters expected by the backend (platform, appVersion, etc).
+    // TODO(ASK_SUPERVISOR): 실제 정책 엔드포인트 경로 및 쿼리
+    // (플랫폼, 앱 버전 등) 규약을 확인해 조정한다.
     final String envName = env.name;
     return _baseUri.resolve('api/config/ptt_policy/$envName.json');
   }
@@ -124,4 +124,3 @@ class PolicyConfigApi {
     }
   }
 }
-

@@ -8,6 +8,14 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:voyage/ptt_ui_event.dart';
 
+/// Simple local PTT session state used to avoid overlapping
+/// record/playback on a single audio engine.
+enum PttSessionState {
+  idle,
+  recording,
+  playing,
+}
+
 class PttLocalAudioEngine {
   PttLocalAudioEngine()
       : _recorder = AudioRecorder(),
@@ -18,6 +26,15 @@ class PttLocalAudioEngine {
 
   bool _initialized = false;
   bool _hasEmittedMicPermissionMissing = false;
+
+  /// Lightweight session state for local PTT audio engine.
+  ///
+  /// - idle     : 녹음/재생 모두 없음
+  /// - recording: 마이크 녹음 중
+  /// - playing  : 로컬/원격 음성 재생 중
+  PttSessionState _sessionState = PttSessionState.idle;
+
+  PttSessionState get sessionState => _sessionState;
 
   /// Absolute path for the current recording file, if any.
   String? _currentFilePath;
@@ -124,9 +141,11 @@ class PttLocalAudioEngine {
       );
 
       await _recorder.start(config, path: fullPath);
+      _sessionState = PttSessionState.recording;
     } catch (e) {
       debugPrint('[PTT][LocalAudio] startRecording error: $e');
       _currentFilePath = null;
+      _sessionState = PttSessionState.idle;
     }
   }
 
@@ -163,15 +182,18 @@ class PttLocalAudioEngine {
 	          '[PTT][LocalAudio] stopRecording: no path '
 	          '(maybe permission denied or encoder error)',
 	        );
+	        _sessionState = PttSessionState.idle;
 	        return null;
 	      }
       debugPrint(
         '[PTT][LocalAudio] stopRecordingAndGetPath hasPath=true',
       );
+      _sessionState = PttSessionState.idle;
       return path;
     } catch (e) {
       debugPrint('[PTT][LocalAudio] stopRecording error: $e');
       _currentFilePath = null;
+      _sessionState = PttSessionState.idle;
       return null;
     }
   }
@@ -188,6 +210,13 @@ class PttLocalAudioEngine {
     }
 
     _lastPlaybackDuration = null;
+
+    if (_sessionState == PttSessionState.recording) {
+      debugPrint(
+        '[PTT][LocalAudio] playFromPath ignored: currently recording',
+      );
+      return;
+    }
 
     try {
       await _player.stop();
@@ -206,10 +235,13 @@ class PttLocalAudioEngine {
         await _player.setFilePath(path);
       }
       _lastPlaybackDuration = _player.duration;
+      _sessionState = PttSessionState.playing;
       await _player.play();
+      _sessionState = PttSessionState.idle;
     } catch (e) {
       debugPrint('[AudioPlayer] play error: $e');
       debugPrint('[PTT][LocalAudio] playFromPath error: $e');
+      _sessionState = PttSessionState.idle;
       if (rethrowOnError) {
         rethrow;
       }
@@ -229,6 +261,7 @@ class PttLocalAudioEngine {
     } catch (e) {
       debugPrint('[PTT][LocalAudio] stopPlayback error: $e');
     }
+    _sessionState = PttSessionState.idle;
   }
 
   Future<void> dispose() async {

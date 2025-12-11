@@ -63,8 +63,8 @@ class LiveKitVoiceTransport implements VoiceTransport {
 
   @override
   Future<void> startPublishing(Stream<List<int>> opus) async {
-    // TODO: 실제 구현 시에는 로컬 마이크/Opus 스트림을
-    // LiveKit LocalTrack에 publish 하도록 연결해야 한다.
+    // TODO(LATER_MVP2): 실제 구현 시에는 로컬 마이크/Opus 스트림을
+    // LiveKit LocalTrack에 publish 하도록 연결한다.
     PttLogger.log(
       '[PTT][Transport][LiveKit]',
       'startPublishing (stub)',
@@ -103,7 +103,8 @@ class LiveKitVoiceTransport implements VoiceTransport {
 
   @override
   Future<void> coolDown() async {
-    // TODO: 실제 구현 시에는 유휴 타이머 이후 Room disconnect 등을 수행한다.
+    // TODO(LATER_MVP2): 실제 구현 시에는 유휴 타이머 이후
+    // Room disconnect 등을 수행한다.
     PttLogger.log(
       '[PTT][Transport][LiveKit]',
       'coolDown (stub)',
@@ -113,4 +114,3 @@ class LiveKitVoiceTransport implements VoiceTransport {
     );
   }
 }
-

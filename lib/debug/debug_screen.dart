@@ -51,6 +51,23 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
     }
   }
 
+  String _formatFcmToken(String? raw) {
+    const fallbackNone = '(none)';
+    if (raw == null || raw.isEmpty) {
+      return fallbackNone;
+    }
+    // 에러/널 표시용 토큰은 그대로 노출한다.
+    if (raw.startsWith('(') && raw.endsWith(')')) {
+      return raw;
+    }
+    if (raw.length <= 40) {
+      return raw;
+    }
+    final String start = raw.substring(0, 16);
+    final String end = raw.substring(raw.length - 8);
+    return '$start...$end';
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authStateNotifierProvider);
@@ -124,7 +141,7 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
             subtitle: Text(
               _loadingToken
                   ? '불러오는 중...'
-                  : (_fcmToken ?? '(none)'),
+                  : _formatFcmToken(_fcmToken),
             ),
           ),
           const Divider(),

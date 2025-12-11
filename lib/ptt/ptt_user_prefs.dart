@@ -16,3 +16,12 @@ final pttVibrateInWalkieProvider = StateProvider<bool>(
   (ref) => false,
 );
 
+/// Whether to show the on-screen PTT debug overlay.
+final pttDebugOverlayEnabledProvider = StateProvider<bool>(
+  (ref) => false,
+);
+
+/// Whether to log verbose PTT debug lines to the console.
+final pttVerboseLoggingEnabledProvider = StateProvider<bool>(
+  (ref) => true,
+);

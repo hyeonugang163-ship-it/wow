@@ -53,15 +53,16 @@ class RealPttMediaApi implements PttMediaApi {
     http.Client? httpClient,
     Uri? baseUri,
   })  : _client = httpClient ?? http.Client(),
-        // TODO: Replace with actual media API base URL
-        // (e.g. "https://api.example.com").
+        // TODO(ASK_SUPERVISOR): 실제 미디어 API base URL
+        // (예: "https://api.example.com") 확정 후 교체한다.
         _baseUri = baseUri ?? Uri.parse('https://example.com/');
 
   final http.Client _client;
   final Uri _baseUri;
 
   Uri _buildUploadUri() {
-    // TODO: Replace with the actual upload path (e.g. "/v1/media/voice").
+    // TODO(ASK_SUPERVISOR): 실제 업로드 엔드포인트 경로
+    // (예: "/v1/media/voice")를 확인해 교체한다.
     return _baseUri.resolve('api/voice/upload');
   }
 
@@ -142,8 +143,8 @@ class RealPttMediaApi implements PttMediaApi {
     try {
       final request = http.MultipartRequest('POST', uri);
 
-      // TODO: Replace "file" with the actual multipart field name
-      // expected by the backend (e.g. "voice" or "audio").
+      // TODO(ASK_SUPERVISOR): 백엔드에서 기대하는 멀티파트 필드 이름
+      // (예: "voice" 또는 "audio")로 "file" 키를 교체한다.
       request.files.add(
         await http.MultipartFile.fromPath(
           'file', // TODO: field name
@@ -151,10 +152,8 @@ class RealPttMediaApi implements PttMediaApi {
         ),
       );
 
-      // TODO: Add additional metadata fields (chatId, friendId,
-      // durationMillis, etc.) when the backend contract is defined.
-      // request.fields['chatId'] = '<TODO: chat id>';
-      // request.fields['durationMillis'] = '<TODO: duration ms>';
+      // TODO(ASK_SUPERVISOR): chatId / friendId / durationMillis 등
+      // 추가 메타데이터 필드가 필요하다면, 실제 계약에 맞게 채운다.
 
       final streamedResponse = await _client.send(request);
       final response =
