@@ -3,6 +3,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:voyage/app_env.dart';
 import 'package:voyage/auth/auth_state_notifier.dart';
 import 'package:voyage/feature_flags.dart';
@@ -163,8 +164,7 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
             onPressed: isProd
                 ? null
                 : () {
-                    Navigator.of(context)
-                        .pushNamed('/debug/logs');
+                    context.push('/debug/logs');
                   },
             child: const Text('디버그 로그 화면 열기'),
           ),

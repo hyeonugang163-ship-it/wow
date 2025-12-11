@@ -60,6 +60,34 @@ class LocalNotificationService {
       onDidReceiveNotificationResponse:
           _onDidReceiveNotificationResponse,
     );
+
+    // Android 알림 채널을 명시적으로 생성해 둔다.
+    if (Platform.isAndroid) {
+      final androidPlugin = _plugin
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+
+      const loudChannel = AndroidNotificationChannel(
+        _channelIdLoud,
+        _channelNameLoud,
+        description: _channelDescLoud,
+        importance: Importance.high,
+      );
+
+      const silentChannel = AndroidNotificationChannel(
+        _channelIdSilent,
+        _channelNameSilent,
+        description: _channelDescSilent,
+        importance: Importance.defaultImportance,
+      );
+
+      await androidPlugin?.createNotificationChannel(
+        loudChannel,
+      );
+      await androidPlugin?.createNotificationChannel(
+        silentChannel,
+      );
+    }
   }
 
   static void _onDidReceiveNotificationResponse(
