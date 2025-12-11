@@ -311,9 +311,10 @@ class FakeChatRepository implements ChatRepository {
 
   @override
   Stream<List<ChatMessage>> watchMessages(String chatId) {
-    // NOTE: Fake 환경에서는 현재 단계에서 실시간 동기화가 필요하지 않으므로
-    // 빈 스트림을 반환한다. 필요 시 추후 in-memory 변경에 맞춰 확장할 수 있다.
-    return const Stream<List<ChatMessage>>.empty();
+    debugPrint(
+      '[FakeChatRepository] watchMessages start chatId=$chatId',
+    );
+    return _api.watchMessages(chatId);
   }
 
   @override
@@ -614,6 +615,16 @@ class RealPttMediaRepository implements PttMediaRepository {
     final result = await _api.uploadVoiceFile(localPath);
     final error = result.error;
     if (error != null) {
+      debugPrint(
+        '[RealPttMediaRepository.uploadVoice] error '
+        'type=${error.type.name} '
+        'statusCode=${error.statusCode?.toString() ?? 'null'} '
+        'code=${error.code ?? 'null'} '
+        'message=${error.message ?? 'null'} '
+        'chatId=${chatId ?? '(none)'} '
+        'friendId=${friendId ?? '(none)'} '
+        'localPathHash=${localPath.hashCode}',
+      );
       _logApiError('RealPttMediaRepository.uploadVoice', error);
       _emitGenericError(_ref, code: error.code);
       throw Exception(

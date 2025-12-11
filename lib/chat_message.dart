@@ -17,7 +17,8 @@ class ChatMessage {
     this.durationMillis,
     this.fromUid,
     this.seenAt,
-  });
+    Map<String, DateTime>? seenBy,
+  }) : seenBy = seenBy ?? const <String, DateTime>{};
 
   final String id;
   final String chatId;
@@ -32,6 +33,7 @@ class ChatMessage {
   final DateTime createdAt;
   final String? fromUid;
   final DateTime? seenAt;
+  final Map<String, DateTime> seenBy;
 
   final ChatMessageType type;
   final String? audioPath;
@@ -59,6 +61,7 @@ class ChatMessage {
       type: ChatMessageType.voice,
       audioPath: audioPath,
       durationMillis: durationMillis,
+      seenBy: const <String, DateTime>{},
     );
   }
 
@@ -74,6 +77,10 @@ class ChatMessage {
       'fromUid': fromUid,
       'createdAt': createdAt.toIso8601String(),
       'seenAt': seenAt?.toIso8601String(),
+      'seenBy': seenBy.map(
+        (String uid, DateTime at) =>
+            MapEntry<String, String>(uid, at.toIso8601String()),
+      ),
     };
   }
 
@@ -82,6 +89,22 @@ class ChatMessage {
     final messageType = typeString == 'voice'
         ? ChatMessageType.voice
         : ChatMessageType.text;
+
+    final Map<String, DateTime> seenBy;
+    final dynamic seenByRaw = json['seenBy'];
+    if (seenByRaw is Map<String, dynamic>) {
+      seenBy = <String, DateTime>{};
+      seenByRaw.forEach((String key, dynamic value) {
+        if (value is String) {
+          final DateTime? parsed = DateTime.tryParse(value);
+          if (parsed != null) {
+            seenBy[key] = parsed;
+          }
+        }
+      });
+    } else {
+      seenBy = const <String, DateTime>{};
+    }
 
     return ChatMessage(
       id: json['id'] as String,
@@ -95,6 +118,15 @@ class ChatMessage {
       type: messageType,
       audioPath: json['audioPath'] as String?,
       durationMillis: json['durationMillis'] as int?,
+      seenBy: seenBy,
     );
+  }
+
+  bool isSeenBy(String uid) {
+    return seenBy.containsKey(uid);
+  }
+
+  DateTime? seenAtBy(String uid) {
+    return seenBy[uid];
   }
 }

@@ -195,13 +195,16 @@ class PttLocalAudioEngine {
           path.startsWith('http://') ||
               path.startsWith('https://');
       if (isRemote) {
+        debugPrint('[AudioPlayer] play url=$path');
         await _player.setUrl(path);
       } else {
+        debugPrint('[AudioPlayer] play file=$path');
         await _player.setFilePath(path);
       }
       _lastPlaybackDuration = _player.duration;
       await _player.play();
     } catch (e) {
+      debugPrint('[AudioPlayer] play error: $e');
       debugPrint('[PTT][LocalAudio] playFromPath error: $e');
       if (rethrowOnError) {
         rethrow;
@@ -229,6 +232,36 @@ class PttLocalAudioEngine {
       await _player.dispose();
     } catch (e) {
       debugPrint('[PTT][LocalAudio] dispose error: $e');
+    }
+  }
+
+  /// 파일 경로 기준으로 대략적인 재생 길이(ms)를 추정한다.
+  ///
+  /// 실제 재생은 하지 않고, 디코더가 보고한 duration만 사용한다.
+  Future<int?> probeDurationMillis(String path) async {
+    if (!_isSupportedPlatform) {
+      debugPrint(
+        '[PTT][LocalAudio] probeDurationMillis skipped: unsupported platform',
+      );
+      return null;
+    }
+
+    try {
+      await _player.stop();
+      await _player.setFilePath(path);
+      _lastPlaybackDuration = _player.duration;
+      final duration = _lastPlaybackDuration;
+      final millis = duration?.inMilliseconds;
+      debugPrint(
+        '[PTT][LocalAudio] probeDurationMillis '
+        'hasDuration=${millis != null} millis=${millis ?? 0}',
+      );
+      return millis;
+    } catch (e) {
+      debugPrint(
+        '[PTT][LocalAudio] probeDurationMillis error: $e',
+      );
+      return null;
     }
   }
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
@@ -44,6 +45,7 @@ class FakeChatApi implements ChatApi {
         text: '안녕! 이것은 더미 메시지야.',
         fromMe: false,
         createdAt: now,
+        seenBy: const <String, DateTime>{},
       ),
       ChatMessage(
         id: (now.millisecondsSinceEpoch + 1).toString(),
@@ -51,12 +53,16 @@ class FakeChatApi implements ChatApi {
         text: '테스트 채팅방에 온 걸 환영해.',
         fromMe: true,
         createdAt: now,
+        seenBy: const <String, DateTime>{},
       ),
     ];
   }
 
   final Map<String, List<ChatMessage>> _messagesByChat =
       <String, List<ChatMessage>>{};
+  final Map<String, StreamController<List<ChatMessage>>>
+      _controllers =
+      <String, StreamController<List<ChatMessage>>>{};
 
   int _idCounter = 0;
 
@@ -64,6 +70,39 @@ class FakeChatApi implements ChatApi {
     _idCounter += 1;
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     return 'm_${timestamp}_$_idCounter';
+  }
+
+  Stream<List<ChatMessage>> _controllerStreamForChat(
+    String chatId,
+  ) {
+    final controller =
+        _controllers.putIfAbsent(
+      chatId,
+      () => StreamController<List<ChatMessage>>.broadcast(),
+    );
+    // Seed with current messages snapshot.
+    final current =
+        List<ChatMessage>.from(
+          _messagesByChat[chatId] ?? <ChatMessage>[],
+        );
+    scheduleMicrotask(() {
+      if (!controller.isClosed) {
+        controller.add(current);
+      }
+    });
+    return controller.stream;
+  }
+
+  void _emitMessages(String chatId) {
+    final controller = _controllers[chatId];
+    if (controller == null || controller.isClosed) {
+      return;
+    }
+    final current =
+        List<ChatMessage>.from(
+          _messagesByChat[chatId] ?? <ChatMessage>[],
+        );
+    controller.add(current);
   }
 
   @override
@@ -107,10 +146,13 @@ class FakeChatApi implements ChatApi {
       text: text,
       fromMe: true,
       createdAt: now,
+      seenBy: const <String, DateTime>{},
     );
     final list =
         _messagesByChat.putIfAbsent(chatId, () => <ChatMessage>[]);
     list.add(message);
+
+    _emitMessages(chatId);
 
     PttLogger.log(
       '[Backend][ChatApi][Fake]',
@@ -143,6 +185,8 @@ class FakeChatApi implements ChatApi {
         _messagesByChat.putIfAbsent(chatId, () => <ChatMessage>[]);
     list.add(message);
 
+    _emitMessages(chatId);
+
     PttLogger.log(
       '[Backend][ChatApi][Fake]',
       'sendVoiceMessage',
@@ -158,9 +202,7 @@ class FakeChatApi implements ChatApi {
 
   @override
   Stream<List<ChatMessage>> watchMessages(String chatId) {
-    // Fake 환경에서는 현재 단계에서 별도의 실시간 동기화가 필요하지 않으므로
-    // 빈 스트림을 반환한다. 인터페이스 호환성을 위한 구현이다.
-    return const Stream<List<ChatMessage>>.empty();
+    return _controllerStreamForChat(chatId);
   }
 
   @override
@@ -204,6 +246,8 @@ class RealChatApi implements ChatApi {
   /// - durationMillis: int? (음성 메시지 길이 ms)
   /// - fromUid: String? (FirebaseAuth uid)
   /// - createdAt: Timestamp (FieldValue.serverTimestamp)
+  /// - seenAt: Timestamp? (legacy single-viewer seen time)
+  /// - seenBy: Map<String, Timestamp>? (uid -> seen time)
   ChatMessage _fromDocument({
     required String chatId,
     required DocumentSnapshot<Map<String, dynamic>> doc,
@@ -217,9 +261,17 @@ class RealChatApi implements ChatApi {
         data['createdAt'] as Timestamp?;
     final DateTime createdAt =
         createdAtTs?.toDate() ?? DateTime.now();
-    final Timestamp? seenAtTs =
-        data['seenAt'] as Timestamp?;
-    final DateTime? seenAt = seenAtTs?.toDate();
+
+    final Map<String, DateTime> seenBy =
+        <String, DateTime>{};
+    final dynamic rawSeenBy = data['seenBy'];
+    if (rawSeenBy is Map<String, dynamic>) {
+      rawSeenBy.forEach((String uid, dynamic value) {
+        if (value is Timestamp) {
+          seenBy[uid] = value.toDate();
+        }
+      });
+    }
 
     final ChatMessageType type =
         audioPath != null && audioPath.isNotEmpty
@@ -229,6 +281,16 @@ class RealChatApi implements ChatApi {
     final String? currentUid = _currentUid;
     final bool isFromMe =
         fromUid != null && currentUid != null && fromUid == currentUid;
+
+    DateTime? seenAtForCurrentUser;
+    if (currentUid != null) {
+      seenAtForCurrentUser = seenBy[currentUid];
+    }
+    if (seenAtForCurrentUser == null) {
+      final Timestamp? legacySeenAtTs =
+          data['seenAt'] as Timestamp?;
+      seenAtForCurrentUser = legacySeenAtTs?.toDate();
+    }
 
     return ChatMessage(
       id: doc.id,
@@ -240,7 +302,8 @@ class RealChatApi implements ChatApi {
       audioPath: audioPath,
       durationMillis: durationMillis,
       fromUid: fromUid,
-      seenAt: seenAt,
+      seenAt: seenAtForCurrentUser,
+      seenBy: seenBy,
     );
   }
 
@@ -272,13 +335,24 @@ class RealChatApi implements ChatApi {
     if (messageIds.isEmpty) {
       return;
     }
+    final String? viewerUid = _currentUid;
+    if (viewerUid == null) {
+      debugPrint(
+        '[Backend][ChatApi][Real] markMessagesAsSeen skipped: no current uid',
+      );
+      return;
+    }
     try {
+      final WriteBatch batch = _firestore.batch();
       for (final messageId in messageIds) {
         final docRef = _messagesCollection(chatId).doc(messageId);
-        await docRef.update(<String, Object?>{
+        batch.update(docRef, <String, Object?>{
+          'seenBy.$viewerUid': FieldValue.serverTimestamp(),
+          // 유지보수/하위 호환을 위해 legacy seenAt도 함께 업데이트한다.
           'seenAt': FieldValue.serverTimestamp(),
         });
       }
+      await batch.commit();
     } catch (e, st) {
       debugPrint(
         '[Backend][ChatApi][Real] markMessagesAsSeen error: $e',
@@ -364,6 +438,7 @@ class RealChatApi implements ChatApi {
         fromMe: true,
         createdAt: now,
         fromUid: fromUid,
+        seenBy: const <String, DateTime>{},
       );
 
       PttLogger.log(
@@ -396,6 +471,21 @@ class RealChatApi implements ChatApi {
     String localPath,
     int durationMillis,
   ) async {
+    final file = File(localPath);
+    final bool exists = await file.exists();
+    if (!exists) {
+      debugPrint(
+        '[FirestoreChatRepository] sendVoice upload error: '
+        'local file not found path=$localPath',
+      );
+      return ApiResult<ChatMessage>.failure(
+        const ApiError(
+          type: ApiErrorType.notFound,
+          message: 'Local voice file not found',
+        ),
+      );
+    }
+
     try {
       final String? fromUid = _currentUid;
       final now = DateTime.now();
@@ -406,33 +496,59 @@ class RealChatApi implements ChatApi {
         'chatId=$chatId path=$localPath',
       );
 
-      final String uidForPath = fromUid ?? 'anonymous';
-      final file = File(localPath);
-      final ref = _storage
-          .ref()
-          .child('voice')
-          .child(uidForPath)
-          .child(chatId)
-          .child('${docRef.id}.aac');
-      await ref.putFile(file);
-      final downloadUrl = await ref.getDownloadURL();
+      String downloadUrl;
+      try {
+        final String uidForPath = fromUid ?? 'anonymous';
+        final ref = _storage
+            .ref()
+            .child('voice')
+            .child(uidForPath)
+            .child(chatId)
+            .child('${docRef.id}.aac');
+        await ref.putFile(file);
+        downloadUrl = await ref.getDownloadURL();
+        debugPrint(
+          '[FirestoreChatRepository] sendVoice upload success '
+          'chatId=$chatId url=$downloadUrl',
+        );
+      } catch (e, st) {
+        debugPrint(
+          '[FirestoreChatRepository] sendVoice upload error: $e',
+        );
+        debugPrint(st.toString());
+        return ApiResult<ChatMessage>.failure(
+          const ApiError(
+            type: ApiErrorType.unknown,
+            message: 'RealChatApi.sendVoiceMessage upload error',
+          ),
+        );
+      }
 
-      debugPrint(
-        '[FirestoreChatRepository] sendVoice upload success url=$downloadUrl',
-      );
-
-      await docRef.set(<String, Object?>{
-        'text': null,
-        'audioPath': downloadUrl,
-        'durationMillis': durationMillis,
-        'fromUid': fromUid,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      debugPrint(
-        '[FirestoreChatRepository] sendVoice firestore write success '
-        'docId=${docRef.id}',
-      );
+      try {
+        await docRef.set(<String, Object?>{
+          'text': null,
+          'audioPath': downloadUrl,
+          'durationMillis': durationMillis,
+          'fromUid': fromUid,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+        debugPrint(
+          '[FirestoreChatRepository] sendVoice firestore write success '
+          'chatId=$chatId docId=${docRef.id}',
+        );
+      } catch (e, st) {
+        debugPrint(
+          '[FirestoreChatRepository] sendVoice firestore write error: $e',
+        );
+        debugPrint(st.toString());
+        return ApiResult<ChatMessage>.failure(
+          const ApiError(
+            type: ApiErrorType.unknown,
+            message:
+                'RealChatApi.sendVoiceMessage firestore write error',
+          ),
+        );
+      }
 
       final message = ChatMessage(
         id: docRef.id,
@@ -444,6 +560,7 @@ class RealChatApi implements ChatApi {
         audioPath: downloadUrl,
         durationMillis: max(durationMillis, 0),
         fromUid: fromUid,
+        seenBy: const <String, DateTime>{},
       );
 
       PttLogger.log(
@@ -458,9 +575,6 @@ class RealChatApi implements ChatApi {
 
       return ApiResult<ChatMessage>.success(message);
     } catch (e, st) {
-      debugPrint(
-        '[FirestoreChatRepository] sendVoice upload/write error: $e',
-      );
       debugPrint(
         '[Backend][ChatApi][Real] sendVoiceMessage error: $e',
       );

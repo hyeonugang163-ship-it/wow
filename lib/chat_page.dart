@@ -10,6 +10,7 @@ import 'package:voyage/core/theme/app_colors.dart';
 import 'package:voyage/feature_flags.dart';
 import 'package:voyage/friend_state.dart';
 import 'package:voyage/ptt/ptt_mode_provider.dart';
+import 'package:voyage/ptt_debug_log.dart';
 
 final _chatControllers = <String, TextEditingController>{};
 
@@ -55,12 +56,102 @@ class ChatPage extends ConsumerStatefulWidget {
 }
 
 class _ChatPageState extends ConsumerState<ChatPage> {
+  final Set<String> _autoPlayedMessageIds =
+      <String>{};
+
   @override
   void initState() {
     super.initState();
     final notifier = ref.read(chatMessagesProvider.notifier);
     notifier.loadInitialMessages(widget.chatId);
     notifier.startWatching(widget.chatId);
+
+    // 자동 재생 – Walkie 모드에서만 동작.
+    ref.listen<List<ChatMessage>>(
+      chatMessagesProvider,
+      (previous, next) async {
+        if (!mounted) {
+          return;
+        }
+
+        // 첫 스냅샷에서는 자동 재생하지 않고 기준점으로만 사용한다.
+        if (previous == null) {
+          return;
+        }
+
+        final mode = ref.read(pttModeProvider);
+        if (mode != PttMode.walkie) {
+          return;
+        }
+
+        final String chatId = widget.chatId;
+        final List<ChatMessage> prevForChat =
+            previous
+                .where((m) => m.chatId == chatId)
+                .toList(growable: false);
+        final List<ChatMessage> nextForChat =
+            next
+                .where((m) => m.chatId == chatId)
+                .toList(growable: false);
+
+        if (nextForChat.isEmpty) {
+          return;
+        }
+
+        final Set<String> prevIds =
+            prevForChat.map((m) => m.id).toSet();
+        final List<ChatMessage> newMessages =
+            nextForChat
+                .where((m) => !prevIds.contains(m.id))
+                .toList(growable: false);
+        if (newMessages.isEmpty) {
+          return;
+        }
+
+        final List<ChatMessage> candidates =
+            newMessages.where((m) {
+          final bool isVoice =
+              m.type == ChatMessageType.voice &&
+                  (m.audioPath ?? '').isNotEmpty;
+          final bool fromOther = !m.fromMe;
+          final bool notPlayed =
+              !_autoPlayedMessageIds.contains(m.id);
+          return isVoice && fromOther && notPlayed;
+        }).toList(growable: false);
+
+        if (candidates.isEmpty) {
+          return;
+        }
+
+        final ChatMessage toPlay = candidates.last;
+        final String path = toPlay.audioPath ?? '';
+        if (path.isEmpty) {
+          return;
+        }
+
+        _autoPlayedMessageIds.add(toPlay.id);
+        PttLogger.log(
+          '[PTT-AutoPlay]',
+          'walkie auto-play',
+          meta: <String, Object?>{
+            'chatId': chatId,
+            'messageId': toPlay.id,
+          },
+        );
+
+        final player = ref.read(chatVoicePlayerProvider);
+        try {
+          await player.togglePlay(
+            path: path,
+            messageId: toPlay.id,
+          );
+        } catch (e) {
+          debugPrint(
+            '[PTT-AutoPlay] auto-play error: $e',
+          );
+        }
+      },
+    );
   }
 
   @override
@@ -280,10 +371,17 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 } else {
                   final textColor =
                       AppColors.textPrimary;
-                  final bool isSeen =
-                      message.seenAt != null;
-                  final String? statusText =
-                      isMe ? (isSeen ? '읽음' : '전송됨') : null;
+                  String? statusText;
+                  if (isMe) {
+                    // 1:1 채팅 가정: chatId를 상대 uid로 사용.
+                    final String otherUid = chatId;
+                    final bool isSeenByOther =
+                        message.isSeenBy(otherUid);
+                    statusText =
+                        isSeenByOther ? '읽음' : '전송됨';
+                  } else {
+                    statusText = null;
+                  }
 
                   return Align(
                     alignment: alignment,

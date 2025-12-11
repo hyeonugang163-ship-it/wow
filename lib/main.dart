@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,6 +9,8 @@ import 'package:voyage/app_router.dart';
 import 'package:voyage/core/app_provider_observer.dart';
 import 'package:voyage/core/theme/app_theme.dart';
 import 'package:voyage/feature_flags.dart';
+import 'package:voyage/notifications/fcm_push_handler.dart';
+import 'package:voyage/notifications/local_notification_service.dart';
 import 'package:voyage/ptt/ptt_prefs.dart';
 import 'package:voyage/ptt_debug_log.dart';
 import 'package:voyage/ptt_lifecycle.dart';
@@ -43,8 +46,14 @@ Future<void> main() async {
     debugPrint('[Firebase] initialization error: $e');
     debugPrint(st.toString());
   }
+  FirebaseMessaging.onBackgroundMessage(
+    firebaseMessagingBackgroundHandler,
+  );
+
   FF.initForEnv();
   PttPushHandler.init();
+  await LocalNotificationService.initialize();
+  await FcmPushHandler.init();
   runApp(
     ProviderScope(
       overrides: <Override>[

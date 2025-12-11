@@ -57,15 +57,39 @@ class ChatMessagesNotifier extends StateNotifier<List<ChatMessage>> {
 
   Future<void> startWatching(String chatId) async {
     await _watchSubscription?.cancel();
+    PttLogger.log(
+      '[ChatMessagesNotifier]',
+      'startWatching',
+      meta: <String, Object?>{
+        'chatId': chatId,
+      },
+    );
     try {
       _watchSubscription = _repository.watchMessages(chatId).listen(
         (messages) {
-          final others =
-              state.where((m) => m.chatId != chatId).toList(growable: false);
+          final others = state
+              .where((m) => m.chatId != chatId)
+              .toList(growable: false);
           state = <ChatMessage>[...others, ...messages];
-          debugPrint(
-            '[ChatMessagesNotifier] onMessagesUpdate '
-            'chatId=$chatId count=${messages.length}',
+
+          final int count = messages.length;
+          DateTime? firstAt;
+          DateTime? lastAt;
+          if (count > 0) {
+            firstAt = messages.first.createdAt;
+            lastAt = messages.last.createdAt;
+          }
+          PttLogger.log(
+            '[ChatMessagesNotifier]',
+            'onMessagesUpdate',
+            meta: <String, Object?>{
+              'chatId': chatId,
+              'count': count,
+              if (firstAt != null)
+                'firstAt': firstAt.toIso8601String(),
+              if (lastAt != null)
+                'lastAt': lastAt.toIso8601String(),
+            },
           );
         },
         onError: (Object error, StackTrace stackTrace) {
@@ -85,6 +109,10 @@ class ChatMessagesNotifier extends StateNotifier<List<ChatMessage>> {
   Future<void> stopWatching() async {
     await _watchSubscription?.cancel();
     _watchSubscription = null;
+    PttLogger.log(
+      '[ChatMessagesNotifier]',
+      'stopWatching',
+    );
   }
 
   void addMessage({
@@ -99,6 +127,7 @@ class ChatMessagesNotifier extends StateNotifier<List<ChatMessage>> {
       text: text,
       fromMe: fromMe,
       createdAt: now,
+      seenBy: const <String, DateTime>{},
     );
     state = [...state, message];
 
@@ -146,6 +175,15 @@ class ChatMessagesNotifier extends StateNotifier<List<ChatMessage>> {
     );
 
     final int safeDurationMillis = durationMillis ?? 0;
+    if (durationMillis == null) {
+      PttLogger.log(
+        '[Chat][Voice]',
+        'durationMillis is null, defaulting to 0',
+        meta: <String, Object?>{
+          'chatId': chatId,
+        },
+      );
+    }
     _repository
         .sendVoice(chatId, audioPath, safeDurationMillis)
         .catchError((Object error, StackTrace stackTrace) {
@@ -181,6 +219,7 @@ class ChatMessagesNotifier extends StateNotifier<List<ChatMessage>> {
           durationMillis: durationMillis,
           fromUid: message.fromUid,
           seenAt: message.seenAt,
+          seenBy: message.seenBy,
         );
       }
       return message;
@@ -234,6 +273,7 @@ class ChatMessagesNotifier extends StateNotifier<List<ChatMessage>> {
           durationMillis: message.durationMillis,
           fromUid: message.fromUid,
           seenAt: now,
+          seenBy: message.seenBy,
         );
       }
       return message;
@@ -283,6 +323,10 @@ class ChatMessagesNotifier extends StateNotifier<List<ChatMessage>> {
   @override
   void dispose() {
     _watchSubscription?.cancel();
+    PttLogger.log(
+      '[ChatMessagesNotifier]',
+      'dispose',
+    );
     super.dispose();
   }
 }

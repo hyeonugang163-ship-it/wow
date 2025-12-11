@@ -17,6 +17,7 @@ import 'package:voyage/feature_flags.dart';
 import 'package:voyage/friend_state.dart';
 import 'package:voyage/ptt_controller.dart';
 import 'package:voyage/ptt_debug_overlay.dart';
+import 'package:voyage/ptt_debug_log.dart';
 import 'package:voyage/ptt_strings.dart';
 import 'package:voyage/ptt/ptt_mode_provider.dart';
 import 'package:voyage/ptt/ptt_user_prefs.dart';
@@ -24,9 +25,11 @@ import 'package:voyage/ptt_ui_event.dart';
 
 /// Minimum hold duration before PTT actually starts.
 ///
-/// TODO: move to PolicyConfig / FeatureFlags if we need
-/// platform- or market-specific tuning.
-const Duration kPttMinHoldDuration = Duration(milliseconds: 500);
+/// 사용자가 오동작 없이 "꾹 눌러서 말하기"를 인지할 수 있도록
+/// 기본값을 1초로 둔다.
+///
+/// TODO: 플랫폼/시장별 튜닝이 필요하면 PolicyConfig / FeatureFlags 로 이동한다.
+const Duration kPttMinHoldDuration = Duration(milliseconds: 1000);
 
 class PttHomePage extends ConsumerStatefulWidget {
   const PttHomePage({super.key});
@@ -104,6 +107,14 @@ class _PttHomePageState extends ConsumerState<PttHomePage> {
     if (kDebugMode) {
       debugPrint('[PTT][UI] press down');
     }
+    PttLogger.log(
+      '[PTT][UI]',
+      'press_down',
+      meta: <String, Object?>{
+        'at': _pressStartedAt!.toIso8601String(),
+        'minHoldMs': kPttMinHoldDuration.inMilliseconds,
+      },
+    );
 
     _holdTimer = Timer(kPttMinHoldDuration, () async {
       if (!_isPressed || _hasStartedTalk) {
@@ -125,12 +136,25 @@ class _PttHomePageState extends ConsumerState<PttHomePage> {
     final mode = ref.read(pttModeProvider);
     final currentFriendId = ref.read(currentPttFriendIdProvider);
 
+    final startedAt = _pressStartedAt;
     _isPressed = false;
     _holdTimer?.cancel();
-    final startedAt = _pressStartedAt;
     _pressStartedAt = null;
 
     if (_hasStartedTalk) {
+      final int heldMs = startedAt == null
+          ? 0
+          : DateTime.now()
+              .difference(startedAt)
+              .inMilliseconds;
+      PttLogger.log(
+        '[PTT][UI]',
+        'press_end_valid',
+        meta: <String, Object?>{
+          'heldMs': heldMs,
+          'minHoldMs': kPttMinHoldDuration.inMilliseconds,
+        },
+      );
       await _handlePressEnd(context);
       return;
     }
@@ -144,6 +168,14 @@ class _PttHomePageState extends ConsumerState<PttHomePage> {
         'heldMs=$heldMs minHoldMs=${kPttMinHoldDuration.inMilliseconds}',
       );
     }
+    PttLogger.log(
+      '[PTT][UI]',
+      'press_end_short',
+      meta: <String, Object?>{
+        'heldMs': heldMs,
+        'minHoldMs': kPttMinHoldDuration.inMilliseconds,
+      },
+    );
 
     if (!mounted) {
       return;
@@ -411,42 +443,90 @@ class _PttHomePageState extends ConsumerState<PttHomePage> {
                 const SizedBox(height: 24),
                 Expanded(
                   child: Center(
-                    child: GestureDetector(
-                      onTapDown: (_) => _onPressDown(context),
-                      onTapUp: (_) async => _onPressEnd(context),
-                      onTapCancel: () async => _onPressEnd(context),
-                      child: Container(
-                        width: 180,
-                        height: 180,
-                        decoration: BoxDecoration(
-                          color: isFriendBlocked
-                              ? Theme.of(context)
-                                  .colorScheme
-                                  .errorContainer
-                              : (isTalking || _isPressed)
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (!_isPressed && !isTalking) ...[
+                          Text(
+                            '1초 이상 꾹 누르면 전송, 짧게 떼면 취소',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(
+                                  color: AppColors.textPrimary
+                                      .withOpacity(0.7),
+                                ),
+                          ),
+                          const SizedBox(height: 12),
+                        ] else ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.red.withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.mic,
+                                  size: 16,
+                                  color: Colors.red,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  '녹음 중… 손을 떼면 전송, 1초 이내 떼면 취소',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelSmall
+                                      ?.copyWith(color: Colors.red),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                        GestureDetector(
+                          onTapDown: (_) => _onPressDown(context),
+                          onTapUp: (_) async => _onPressEnd(context),
+                          onTapCancel: () async => _onPressEnd(context),
+                          child: Container(
+                            width: 180,
+                            height: 180,
+                            decoration: BoxDecoration(
+                              color: isFriendBlocked
                                   ? Theme.of(context)
                                       .colorScheme
-                                      .primary
-                                  : AppColors.primarySoft,
-                          shape: BoxShape.circle,
+                                      .errorContainer
+                                  : (isTalking || _isPressed)
+                                      ? Theme.of(context)
+                                          .colorScheme
+                                          .primary
+                                      : AppColors.primarySoft,
+                              shape: BoxShape.circle,
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              currentFriend == null
+                                  ? '친구 선택 필요'
+                                  : isFriendBlocked
+                                      ? '차단됨'
+                                      : isTalking
+                                          ? '녹음 중…'
+                                          : '꾹 누르고 말하기',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(
+                                    color: AppColors.textPrimary,
+                                  ),
+                            ),
+                          ),
                         ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          currentFriend == null
-                              ? '친구 선택 필요'
-                              : isFriendBlocked
-                                  ? '차단됨'
-                                  : isTalking
-                                      ? 'Talking…'
-                                      : '꾹 누르고 말하기',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(
-                                color: AppColors.textPrimary,
-                              ),
-                        ),
-                      ),
+                      ],
                     ),
                   ),
                 ),

@@ -2,6 +2,7 @@
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyage/android_ptt_service.dart' as android_ptt;
 import 'package:voyage/backend/backend_providers.dart';
@@ -97,6 +98,14 @@ class PttController {
     if (!_localAudioInitialized) {
       await _localAudio.init();
       _localAudioInitialized = true;
+    }
+    // 재생 중인 로컬 오디오가 있다면 중단한 뒤 녹음을 시작한다.
+    try {
+      await _localAudio.stopPlayback();
+    } catch (e) {
+      debugPrint(
+        '[PTT][LocalAudio] stopPlayback before startRecording error: $e',
+      );
     }
     await _localAudio.startRecording();
     // 네트워크/즉시 재생 PTT는 Walkie 모드에서만 수행한다.
@@ -538,6 +547,43 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
         },
       );
 
+      int? durationMillis;
+      try {
+        final localAudio =
+            _ref.read(pttLocalAudioEngineProvider);
+        durationMillis =
+            await localAudio.probeDurationMillis(path);
+        if (durationMillis == null) {
+          PttLogger.log(
+            '[PTT][Manner][duration]',
+            'probeDurationMillis returned null',
+            meta: <String, Object?>{
+              'chatId': targetFriendId,
+              'pathLen': pathLen,
+            },
+          );
+        } else {
+          PttLogger.log(
+            '[PTT][Manner][duration]',
+            'probeDurationMillis success',
+            meta: <String, Object?>{
+              'chatId': targetFriendId,
+              'durationMillis': durationMillis,
+            },
+          );
+        }
+      } catch (e, st) {
+        PttLogger.log(
+          '[PTT][Manner][duration]',
+          'probeDurationMillis error',
+          meta: <String, Object?>{
+            'chatId': targetFriendId,
+            'error': e.toString(),
+          },
+        );
+        debugPrint(st.toString());
+      }
+
       final String uploadPath = path;
       _ref
           .read(pttMediaRepositoryProvider)
@@ -562,8 +608,7 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
       _ref.read(chatMessagesProvider.notifier).addVoiceMessage(
             chatId: targetFriendId,
             audioPath: uploadPath,
-            // TODO: 실제 음성 길이를 계산해서 durationMillis에 채운다.
-            durationMillis: null,
+            durationMillis: durationMillis,
             fromMe: true,
           );
 
@@ -574,7 +619,7 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
             updatedAt: DateTime.now(),
           );
     } catch (e) {
-      final hasPath = path.isNotEmpty;
+      final bool hasPath = path.isNotEmpty;
       PttLogger.log(
         '[PTT][notifier.stopTalk]',
         'error while adding voice',

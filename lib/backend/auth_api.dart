@@ -1,3 +1,8 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:http/http.dart' as http;
 import 'package:voyage/backend/api_result.dart';
 import 'package:voyage/ptt_debug_log.dart';
 
@@ -74,32 +79,377 @@ class FakeAuthApi implements AuthApi {
 /// When wiring a real backend, inject an HTTP client here and translate
 /// HTTP/network errors into ApiResult/ApiError.
 class RealAuthApi implements AuthApi {
-  RealAuthApi();
+  RealAuthApi({
+    http.Client? httpClient,
+    Uri? baseUri,
+  })  : _client = httpClient ?? http.Client(),
+        // TODO: Replace with actual auth API base URL
+        // (e.g. "https://api.example.com/").
+        _baseUri = baseUri ?? Uri.parse('https://example.com/');
 
-  @override
-  Future<ApiResult<AuthSession>> loginWithToken(String deviceId) {
-    // TODO: Implement HTTP call for login.
-    return Future<ApiResult<AuthSession>>.value(
-      ApiResult<AuthSession>.failure(
-        const ApiError(
-          type: ApiErrorType.unknown,
-          message: 'RealAuthApi.loginWithToken is not implemented',
-        ),
-      ),
+  final http.Client _client;
+  final Uri _baseUri;
+
+  Uri _buildLoginUri() {
+    // TODO: Replace with the actual login path (e.g. "/v1/auth/login").
+    return _baseUri.resolve('api/auth/login');
+  }
+
+  Uri _buildRefreshUri() {
+    // TODO: Replace with the actual refresh path (e.g. "/v1/auth/refresh").
+    return _baseUri.resolve('api/auth/refresh');
+  }
+
+  ApiError _mapHttpError({
+    required int statusCode,
+    String? body,
+  }) {
+    final ApiErrorType type;
+    if (statusCode == 401) {
+      type = ApiErrorType.unauthorized;
+    } else if (statusCode == 403) {
+      type = ApiErrorType.forbidden;
+    } else if (statusCode == 404) {
+      type = ApiErrorType.notFound;
+    } else if (statusCode >= 500) {
+      type = ApiErrorType.server;
+    } else {
+      type = ApiErrorType.unknown;
+    }
+
+    String? message;
+    String? code;
+
+    if (body != null && body.isNotEmpty) {
+      final String trimmedBody =
+          body.length > 500 ? body.substring(0, 500) : body;
+      try {
+        final dynamic decoded = jsonDecode(trimmedBody);
+        if (decoded is Map<String, dynamic>) {
+          code = decoded['code'] as String?;
+          message = (decoded['message'] as String?) ?? trimmedBody;
+        } else {
+          message = trimmedBody;
+        }
+      } catch (_) {
+        message = trimmedBody;
+      }
+    }
+
+    return ApiError(
+      type: type,
+      statusCode: statusCode,
+      code: code,
+      message: message,
+    );
+  }
+
+  AuthSession _parseSession(Map<String, dynamic> json) {
+    // TODO: Align these field names with the real backend contract.
+    final String? userId = json['userId'] as String?;
+    final String? accessToken = json['accessToken'] as String?;
+    final String? refreshToken = json['refreshToken'] as String?;
+    final String? expiresAtRaw = json['expiresAt'] as String?;
+
+    if (userId == null ||
+        accessToken == null ||
+        refreshToken == null ||
+        expiresAtRaw == null) {
+      throw const FormatException(
+        'Missing required auth fields in response',
+      );
+    }
+
+    DateTime expiresAt;
+    try {
+      // TODO: Adjust parsing if backend uses numeric timestamps instead.
+      expiresAt = DateTime.parse(expiresAtRaw);
+    } catch (_) {
+      // If parsing fails, fall back to a short-lived session.
+      expiresAt = DateTime.now().add(const Duration(hours: 1));
+    }
+
+    return AuthSession(
+      userId: userId,
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+      expiresAt: expiresAt,
     );
   }
 
   @override
-  Future<ApiResult<AuthSession>> refresh(String refreshToken) {
-    // TODO: Implement HTTP call for refresh.
-    return Future<ApiResult<AuthSession>>.value(
-      ApiResult<AuthSession>.failure(
-        const ApiError(
-          type: ApiErrorType.unknown,
-          message: 'RealAuthApi.refresh is not implemented',
-        ),
-      ),
+  Future<ApiResult<AuthSession>> loginWithToken(String deviceId) async {
+    final Uri uri = _buildLoginUri();
+    PttLogger.log(
+      '[Backend][AuthApi][Real]',
+      'loginWithToken request',
+      meta: <String, Object?>{
+        'uri': uri.toString(),
+        'deviceIdHash': deviceId.hashCode,
+      },
     );
+
+    try {
+      final response = await _client
+          .post(
+            uri,
+            headers: <String, String>{
+              'Content-Type': 'application/json',
+              // TODO: Add authorization headers if needed.
+            },
+            body: jsonEncode(<String, Object?>{
+              // TODO: Replace "deviceId" with the field name expected by backend.
+              'deviceId': deviceId,
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      PttLogger.log(
+        '[Backend][AuthApi][Real]',
+        'loginWithToken response',
+        meta: <String, Object?>{
+          'statusCode': response.statusCode,
+          'contentLength': response.contentLength ?? -1,
+        },
+      );
+
+      final int statusCode = response.statusCode;
+      if (statusCode >= 200 && statusCode < 300) {
+        final String body = response.body;
+        if (body.isEmpty) {
+          return ApiResult<AuthSession>.failure(
+            const ApiError(
+              type: ApiErrorType.unknown,
+              message: 'Empty auth response body',
+            ),
+          );
+        }
+
+        try {
+          final dynamic decoded = jsonDecode(body);
+          if (decoded is Map<String, dynamic>) {
+            final session = _parseSession(decoded);
+            return ApiResult<AuthSession>.success(session);
+          }
+
+          return ApiResult<AuthSession>.failure(
+            const ApiError(
+              type: ApiErrorType.unknown,
+              message:
+                  'Unexpected auth response format (expected JSON object)',
+            ),
+          );
+        } catch (e) {
+          return ApiResult<AuthSession>.failure(
+            ApiError(
+              type: ApiErrorType.unknown,
+              message:
+                  'Failed to parse auth response: ${e.toString()}',
+            ),
+          );
+        }
+      }
+
+      final ApiError error = _mapHttpError(
+        statusCode: statusCode,
+        body: response.body,
+      );
+      return ApiResult<AuthSession>.failure(error);
+    } on SocketException catch (e) {
+      PttLogger.log(
+        '[Backend][AuthApi][Real]',
+        'loginWithToken network error',
+        meta: <String, Object?>{
+          'error': e.toString(),
+        },
+      );
+      return ApiResult<AuthSession>.failure(
+        const ApiError(
+          type: ApiErrorType.network,
+          message: 'Network error during loginWithToken',
+        ),
+      );
+    } on TimeoutException catch (e) {
+      PttLogger.log(
+        '[Backend][AuthApi][Real]',
+        'loginWithToken timeout',
+        meta: <String, Object?>{
+          'error': e.toString(),
+        },
+      );
+      return ApiResult<AuthSession>.failure(
+        const ApiError(
+          type: ApiErrorType.timeout,
+          message: 'loginWithToken request timed out',
+        ),
+      );
+    } on HttpException catch (e) {
+      PttLogger.log(
+        '[Backend][AuthApi][Real]',
+        'loginWithToken http exception',
+        meta: <String, Object?>{
+          'error': e.toString(),
+        },
+      );
+      return ApiResult<AuthSession>.failure(
+        const ApiError(
+          type: ApiErrorType.network,
+          message: 'HTTP exception during loginWithToken',
+        ),
+      );
+    } catch (e) {
+      PttLogger.log(
+        '[Backend][AuthApi][Real]',
+        'loginWithToken unknown exception',
+        meta: <String, Object?>{
+          'error': e.toString(),
+        },
+      );
+      return ApiResult<AuthSession>.failure(
+        ApiError(
+          type: ApiErrorType.unknown,
+          message:
+              'Unknown error during loginWithToken: ${e.toString()}',
+        ),
+      );
+    }
+  }
+
+  @override
+  Future<ApiResult<AuthSession>> refresh(String refreshToken) async {
+    final Uri uri = _buildRefreshUri();
+    PttLogger.log(
+      '[Backend][AuthApi][Real]',
+      'refresh request',
+      meta: <String, Object?>{
+        'uri': uri.toString(),
+        'refreshTokenHash': refreshToken.hashCode,
+      },
+    );
+
+    try {
+      final response = await _client
+          .post(
+            uri,
+            headers: <String, String>{
+              'Content-Type': 'application/json',
+              // TODO: Add authorization headers if needed.
+            },
+            body: jsonEncode(<String, Object?>{
+              // TODO: Replace "refreshToken" with field name expected by backend.
+              'refreshToken': refreshToken,
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      PttLogger.log(
+        '[Backend][AuthApi][Real]',
+        'refresh response',
+        meta: <String, Object?>{
+          'statusCode': response.statusCode,
+          'contentLength': response.contentLength ?? -1,
+        },
+      );
+
+      final int statusCode = response.statusCode;
+      if (statusCode >= 200 && statusCode < 300) {
+        final String body = response.body;
+        if (body.isEmpty) {
+          return ApiResult<AuthSession>.failure(
+            const ApiError(
+              type: ApiErrorType.unknown,
+              message: 'Empty refresh response body',
+            ),
+          );
+        }
+
+        try {
+          final dynamic decoded = jsonDecode(body);
+          if (decoded is Map<String, dynamic>) {
+            final session = _parseSession(decoded);
+            return ApiResult<AuthSession>.success(session);
+          }
+
+          return ApiResult<AuthSession>.failure(
+            const ApiError(
+              type: ApiErrorType.unknown,
+              message:
+                  'Unexpected refresh response format (expected JSON object)',
+            ),
+          );
+        } catch (e) {
+          return ApiResult<AuthSession>.failure(
+            ApiError(
+              type: ApiErrorType.unknown,
+              message:
+                  'Failed to parse refresh response: ${e.toString()}',
+            ),
+          );
+        }
+      }
+
+      final ApiError error = _mapHttpError(
+        statusCode: statusCode,
+        body: response.body,
+      );
+      return ApiResult<AuthSession>.failure(error);
+    } on SocketException catch (e) {
+      PttLogger.log(
+        '[Backend][AuthApi][Real]',
+        'refresh network error',
+        meta: <String, Object?>{
+          'error': e.toString(),
+        },
+      );
+      return ApiResult<AuthSession>.failure(
+        const ApiError(
+          type: ApiErrorType.network,
+          message: 'Network error during refresh',
+        ),
+      );
+    } on TimeoutException catch (e) {
+      PttLogger.log(
+        '[Backend][AuthApi][Real]',
+        'refresh timeout',
+        meta: <String, Object?>{
+          'error': e.toString(),
+        },
+      );
+      return ApiResult<AuthSession>.failure(
+        const ApiError(
+          type: ApiErrorType.timeout,
+          message: 'refresh request timed out',
+        ),
+      );
+    } on HttpException catch (e) {
+      PttLogger.log(
+        '[Backend][AuthApi][Real]',
+        'refresh http exception',
+        meta: <String, Object?>{
+          'error': e.toString(),
+        },
+      );
+      return ApiResult<AuthSession>.failure(
+        const ApiError(
+          type: ApiErrorType.network,
+          message: 'HTTP exception during refresh',
+        ),
+      );
+    } catch (e) {
+      PttLogger.log(
+        '[Backend][AuthApi][Real]',
+        'refresh unknown exception',
+        meta: <String, Object?>{
+          'error': e.toString(),
+        },
+      );
+      return ApiResult<AuthSession>.failure(
+        ApiError(
+          type: ApiErrorType.unknown,
+          message:
+              'Unknown error during refresh: ${e.toString()}',
+        ),
+      );
+    }
   }
 }
-
