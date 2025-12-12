@@ -14,6 +14,7 @@ val keystoreProperties = Properties()
 if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.inputStream().use(keystoreProperties::load)
 }
+val isReleaseBuild = gradle.startParameter.taskNames.any { it.contains("release", ignoreCase = true) }
 
 android {
     namespace = "com.example.voyage"
@@ -43,22 +44,26 @@ android {
 
     signingConfigs {
         create("release") {
-            val storeFilePath =
-                keystoreProperties.getProperty("storeFile")
-                    ?: error(
-                        "Missing `storeFile` in android/key.properties. " +
-                            "Create an upload keystore and configure signing for Play upload.",
-                    )
-            storeFile = file(storeFilePath)
-            storePassword =
-                keystoreProperties.getProperty("storePassword")
-                    ?: error("Missing `storePassword` in android/key.properties.")
-            keyAlias =
-                keystoreProperties.getProperty("keyAlias")
-                    ?: error("Missing `keyAlias` in android/key.properties.")
-            keyPassword =
-                keystoreProperties.getProperty("keyPassword")
-                    ?: error("Missing `keyPassword` in android/key.properties.")
+            if (keystorePropertiesFile.exists()) {
+                val storeFilePath =
+                    keystoreProperties.getProperty("storeFile")
+                        ?: error("Missing `storeFile` in android/key.properties.")
+                storeFile = file(storeFilePath)
+                storePassword =
+                    keystoreProperties.getProperty("storePassword")
+                        ?: error("Missing `storePassword` in android/key.properties.")
+                keyAlias =
+                    keystoreProperties.getProperty("keyAlias")
+                        ?: error("Missing `keyAlias` in android/key.properties.")
+                keyPassword =
+                    keystoreProperties.getProperty("keyPassword")
+                        ?: error("Missing `keyPassword` in android/key.properties.")
+            } else if (isReleaseBuild) {
+                error(
+                    "Missing android/key.properties (upload keystore config). " +
+                        "Create it to build a properly-signed release bundle for Play Console.",
+                )
+            }
         }
     }
 
