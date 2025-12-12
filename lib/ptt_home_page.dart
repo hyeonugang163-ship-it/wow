@@ -38,12 +38,23 @@ class PttHomePage extends ConsumerStatefulWidget {
   ConsumerState<PttHomePage> createState() => _PttHomePageState();
 }
 
-class _PttHomePageState extends ConsumerState<PttHomePage> {
+class _PttHomePageState extends ConsumerState<PttHomePage>
+    with SingleTickerProviderStateMixin {
   DateTime? _pressStartedAt;
   bool _hasStartedTalk = false;
   bool _isPressed = false;
   Timer? _holdTimer;
   bool _showDebugOverlay = false;
+  late final AnimationController _holdProgressController;
+
+  @override
+  void initState() {
+    super.initState();
+    _holdProgressController = AnimationController(
+      vsync: this,
+      duration: kPttMinHoldDuration,
+    );
+  }
 
   Future<void> _handlePressStart(
     BuildContext context,
@@ -103,6 +114,7 @@ class _PttHomePageState extends ConsumerState<PttHomePage> {
     _hasStartedTalk = false;
     _isPressed = true;
     _holdTimer?.cancel();
+    _holdProgressController.forward(from: 0);
 
     if (kDebugMode) {
       debugPrint('[PTT][UI] press down');
@@ -139,6 +151,8 @@ class _PttHomePageState extends ConsumerState<PttHomePage> {
     final startedAt = _pressStartedAt;
     _isPressed = false;
     _holdTimer?.cancel();
+    _holdProgressController.stop();
+    _holdProgressController.reset();
     _pressStartedAt = null;
 
     if (_hasStartedTalk) {
@@ -191,6 +205,7 @@ class _PttHomePageState extends ConsumerState<PttHomePage> {
   @override
   void dispose() {
     _holdTimer?.cancel();
+    _holdProgressController.dispose();
     super.dispose();
   }
 
@@ -255,34 +270,44 @@ class _PttHomePageState extends ConsumerState<PttHomePage> {
       friendBlocked = blockMap[currentFriendId] ?? false;
     }
 
-    String targetStatusText;
-    if (currentFriend == null) {
-      targetStatusText =
-          '현재 무전 대상이 없습니다. Friends 화면에서 친구를 길게 눌러 설정하세요.';
-    } else if (friendBlocked) {
-      targetStatusText =
-          '현재 대상: ${currentFriend.name} (차단됨: 무전/매너 모두 전송되지 않습니다.)';
-    } else if (!friendAllowed) {
-      targetStatusText =
-          '현재 대상: ${currentFriend.name} (이 친구는 무전 허용이 꺼져 있어, '
-          'Walkie 모드여도 매너 처리됩니다.)';
-    } else if (mode == PttMode.walkie) {
-      targetStatusText =
-          '현재 대상: ${currentFriend.name} (무전모드: 즉시 재생 대상)';
-    } else {
-      targetStatusText =
-          '현재 대상: ${currentFriend.name} (매너모드: 녹음본 형태로만 전송 예정)';
-    }
-
     final bool isFriendBlocked = friendBlocked;
     final bool isWalkieAllowed =
         friendAllowed && !friendBlocked;
+
+    final bool hasTarget = currentFriend != null;
+    final String targetName =
+        currentFriend?.name ?? '무전 대상 없음';
+    final String targetSubtitle;
+    final Color targetChipColor;
+    final IconData targetChipIcon;
+
+    if (!hasTarget) {
+      targetSubtitle = 'Friends에서 친구를 선택해 주세요';
+      targetChipColor = AppColors.textSecondary;
+      targetChipIcon = Icons.person_add_alt_1_outlined;
+    } else if (isFriendBlocked) {
+      targetSubtitle = '차단됨 · 무전/매너 모두 전송 불가';
+      targetChipColor = AppColors.error;
+      targetChipIcon = Icons.block;
+    } else if (!friendAllowed) {
+      targetSubtitle = '무전 허용 OFF · Walkie도 매너 전송';
+      targetChipColor = AppColors.warning;
+      targetChipIcon = Icons.volume_off_outlined;
+    } else if (mode == PttMode.walkie) {
+      targetSubtitle = '즉시 재생 대상 · Walkie 허용';
+      targetChipColor = AppColors.accent;
+      targetChipIcon = Icons.flash_on_outlined;
+    } else {
+      targetSubtitle = '매너모드 · 녹음본으로 전송';
+      targetChipColor = AppColors.textSecondary;
+      targetChipIcon = Icons.chat_bubble_outline;
+    }
     final bool showDebugOverlay =
         _showDebugOverlay || debugOverlayEnabled;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('채팅'),
+        title: const Text('PTT'),
         actions: [
           IconButton(
             icon: const Icon(Icons.chat_bubble_outline),
@@ -319,223 +344,363 @@ class _PttHomePageState extends ConsumerState<PttHomePage> {
       ),
       body: Stack(
         children: [
-          Padding(
+          ListView(
             padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                Card(
+            children: [
+              Card(
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: () {
+                    final friend = currentFriend;
+                    if (friend == null) {
+                      context.push('/friends');
+                      return;
+                    }
+                    final args = PttChatRouteArgs(
+                      friendId: friend.id,
+                      friendName: friend.name,
+                      isWalkieAllowed: isWalkieAllowed,
+                    );
+                    context.pushNamed(
+                      'chat',
+                      pathParameters: <String, String>{
+                        'id': friend.id,
+                      },
+                      extra: args,
+                    );
+                  },
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
                       children: [
-                        Text(
-                          'PTT 모드',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium,
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            ChoiceChip(
-                              label: const Text('무전모드'),
-                              selected: mode == PttMode.walkie,
-                              onSelected: (_) {
-                                ref
-                                    .read(
-                                      pttModeProvider.notifier,
-                                    )
-                                    .setMode(PttMode.walkie);
-                              },
-                            ),
-                            const SizedBox(width: 8),
-                            ChoiceChip(
-                              label: const Text('매너모드'),
-                              selected: mode == PttMode.manner,
-                              onSelected: (_) {
-                                ref
-                                    .read(
-                                      pttModeProvider.notifier,
-                                    )
-                                    .setMode(PttMode.manner);
-                              },
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        InkWell(
-                          onTap: currentFriend == null
-                              ? null
-                              : () {
-                                  final friend = currentFriend;
-                                  final args = PttChatRouteArgs(
-                                    friendId: friend.id,
-                                    friendName: friend.name,
-                                    isWalkieAllowed: isWalkieAllowed,
-                                  );
-                                  context.pushNamed(
-                                    'chat',
-                                    pathParameters: <String, String>{
-                                      'id': friend.id,
-                                    },
-                                    extra: args,
-                                  );
-                                },
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 4,
-                            ),
-                            child: Text(
-                              targetStatusText,
-                              textAlign: TextAlign.start,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium,
-                            ),
+                        CircleAvatar(
+                          radius: 22,
+                          backgroundColor: AppColors.primarySoft,
+                          child: Text(
+                            hasTarget
+                                ? targetName.characters.first
+                                : '＋',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(
+                                  color: AppColors.textPrimary,
+                                ),
                           ),
                         ),
-                        if (currentFriend != null) ...[
-                          const SizedBox(height: 8),
-                          Row(
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment:
+                                CrossAxisAlignment.start,
                             children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      targetName,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding:
+                                        const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: targetChipColor
+                                          .withAlpha(31),
+                                      borderRadius:
+                                          BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: targetChipColor
+                                            .withAlpha(128),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          targetChipIcon,
+                                          size: 14,
+                                          color: targetChipColor,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          hasTarget
+                                              ? (isFriendBlocked
+                                                  ? '차단'
+                                                  : (!friendAllowed
+                                                      ? '무전 OFF'
+                                                      : (mode ==
+                                                              PttMode.walkie
+                                                          ? '즉시재생'
+                                                          : '매너')))
+                                              : '친구 선택',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .labelSmall
+                                              ?.copyWith(
+                                                color: targetChipColor,
+                                              ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
                               Text(
-                                '무전 허용',
+                                targetSubtitle,
                                 style: Theme.of(context)
                                     .textTheme
-                                    .bodyMedium,
-                              ),
-                              const SizedBox(width: 8),
-                              Switch(
-                                value: isWalkieAllowed,
-                                onChanged: (value) async {
-                                  if (friendBlocked) {
-                                    ScaffoldMessenger.of(context)
-                                        .showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          '"${currentFriend.name}"은(는) 차단되어 있어 '
-                                          '무전 허용을 변경할 수 없습니다.',
-                                        ),
-                                        duration: const Duration(
-                                          seconds: 2,
-                                        ),
-                                      ),
-                                    );
-                                    return;
-                                  }
-                                  await ref
-                                      .read(
-                                        friendPttAllowProvider.notifier,
-                                      )
-                                      .setAllowed(
-                                        currentFriend.id,
-                                        value,
-                                      );
-                                },
+                                    .bodySmall,
                               ),
                             ],
                           ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Expanded(
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (!_isPressed && !isTalking) ...[
-                          Text(
-                            '1초 이상 꾹 누르면 전송, 짧게 떼면 취소',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(
-                                  color: AppColors.textPrimary
-                                      .withOpacity(0.7),
-                                ),
-                          ),
-                          const SizedBox(height: 12),
-                        ] else ...[
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.red.withOpacity(0.08),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.mic,
-                                  size: 16,
-                                  color: Colors.red,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  '녹음 중… 손을 떼면 전송, 1초 이내 떼면 취소',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .labelSmall
-                                      ?.copyWith(color: Colors.red),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                        ],
-                        GestureDetector(
-                          onTapDown: (_) => _onPressDown(context),
-                          onTapUp: (_) async => _onPressEnd(context),
-                          onTapCancel: () async => _onPressEnd(context),
-                          child: Container(
-                            width: 180,
-                            height: 180,
-                            decoration: BoxDecoration(
-                              color: isFriendBlocked
-                                  ? Theme.of(context)
-                                      .colorScheme
-                                      .errorContainer
-                                  : (isTalking || _isPressed)
-                                      ? Theme.of(context)
-                                          .colorScheme
-                                          .primary
-                                      : AppColors.primarySoft,
-                              shape: BoxShape.circle,
-                            ),
-                            alignment: Alignment.center,
-                            child: Text(
-                              currentFriend == null
-                                  ? '친구 선택 필요'
-                                  : isFriendBlocked
-                                      ? '차단됨'
-                                      : isTalking
-                                          ? '녹음 중…'
-                                          : '꾹 누르고 말하기',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
-                                  ?.copyWith(
-                                    color: AppColors.textPrimary,
-                                  ),
-                            ),
-                          ),
                         ),
+                        if (hasTarget && !isFriendBlocked)
+                          Switch.adaptive(
+                            value: friendAllowed,
+                            onChanged: (value) {
+                              final id = currentFriendId;
+                              if (id == null) return;
+                              ref
+                                  .read(
+                                    friendPttAllowProvider.notifier,
+                                  )
+                                  .setAllowed(id, value);
+                            },
+                          )
+                        else
+                          const Icon(Icons.chevron_right),
                       ],
                     ),
                   ),
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 12),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '모드',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      SegmentedButton<PttMode>(
+                        segments: const [
+                          ButtonSegment<PttMode>(
+                            value: PttMode.walkie,
+                            label: Text('Walkie'),
+                            icon: Icon(Icons.flash_on_outlined),
+                          ),
+                          ButtonSegment<PttMode>(
+                            value: PttMode.manner,
+                            label: Text('Manner'),
+                            icon: Icon(Icons.chat_bubble_outline),
+                          ),
+                        ],
+                        selected: <PttMode>{mode},
+                        onSelectionChanged: (selection) {
+                          if (selection.isEmpty) return;
+                          ref
+                              .read(pttModeProvider.notifier)
+                              .setMode(selection.first);
+                        },
+                        style: const ButtonStyle(
+                          visualDensity:
+                              VisualDensity.compact,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AnimatedSwitcher(
+                      duration: const Duration(
+                        milliseconds: 150,
+                      ),
+                      child: Text(
+                        _isPressed || isTalking
+                            ? '녹음 중… 손을 떼면 전송'
+                            : (hasTarget
+                                ? '꾹 누르고 말하기'
+                                : '친구를 선택해 시작'),
+                        key: ValueKey<String>(
+                          '${_isPressed}_${isTalking}_${hasTarget}_${mode.name}',
+                        ),
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(
+                              color: (_isPressed || isTalking)
+                                  ? AppColors.error
+                                  : AppColors.textSecondary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    AnimatedBuilder(
+                      animation: _holdProgressController,
+                      builder: (context, _) {
+                        final bool isHolding =
+                            _isPressed && !_hasStartedTalk;
+                        final double holdValue =
+                            _holdProgressController.value;
+
+                        final Color ringColor = isTalking
+                            ? AppColors.primary
+                            : AppColors.accent;
+
+                        final Color buttonColor = isFriendBlocked
+                            ? Theme.of(context)
+                                .colorScheme
+                                .errorContainer
+                            : (isTalking || _isPressed)
+                                ? Theme.of(context)
+                                    .colorScheme
+                                    .primary
+                                : AppColors.primarySoft;
+
+                        final IconData centerIcon =
+                            isFriendBlocked
+                                ? Icons.block
+                                : (isTalking || _isPressed)
+                                    ? Icons.mic
+                                    : Icons.mic_none;
+
+                        final String centerLabel =
+                            !hasTarget
+                                ? '대상 선택'
+                                : isFriendBlocked
+                                    ? '차단됨'
+                                    : (isTalking || _isPressed)
+                                        ? '녹음 중…'
+                                        : '꾹 누르기';
+
+                        return GestureDetector(
+                          onTapDown: (_) => _onPressDown(context),
+                          onTapUp: (_) async =>
+                              _onPressEnd(context),
+                          onTapCancel: () async =>
+                              _onPressEnd(context),
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Container(
+                                width: 216,
+                                height: 216,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: AppColors.borderSubtle,
+                                    width: 2,
+                                  ),
+                                ),
+                              ),
+                              if (isHolding || isTalking)
+                                SizedBox(
+                                  width: 216,
+                                  height: 216,
+                                  child:
+                                      CircularProgressIndicator(
+                                    value: isHolding
+                                        ? holdValue
+                                        : 1,
+                                    strokeWidth: 6,
+                                    backgroundColor:
+                                        Colors.transparent,
+                                    valueColor:
+                                        AlwaysStoppedAnimation<Color>(
+                                      ringColor,
+                                    ),
+                                  ),
+                                ),
+                              AnimatedContainer(
+                                duration:
+                                    const Duration(milliseconds: 120),
+                                curve: Curves.easeOut,
+                                width: isHolding || isTalking
+                                    ? 188
+                                    : 180,
+                                height: isHolding || isTalking
+                                    ? 188
+                                    : 180,
+                                decoration: BoxDecoration(
+                                  color: buttonColor,
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: ringColor.withAlpha(
+                                        isHolding || isTalking ? 89 : 38,
+                                      ),
+                                      blurRadius: 18,
+                                      spreadRadius: 2,
+                                    ),
+                                  ],
+                                ),
+                                alignment: Alignment.center,
+                                child: Column(
+                                  mainAxisSize:
+                                      MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      centerIcon,
+                                      size: 44,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      centerLabel,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium
+                                          ?.copyWith(
+                                            color: AppColors.textPrimary,
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      hasTarget
+                          ? '1초 이상 꾹 누르면 녹음이 시작됩니다.'
+                          : 'Friends에서 무전 대상을 먼저 골라주세요.',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
           if (showDebugOverlay) const PttDebugOverlay(),
         ],

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyage/chat_state.dart';
 import 'package:voyage/ptt_debug_log.dart';
@@ -39,6 +41,14 @@ final voicePlaybackErrorMessageIdsProvider = StateProvider<Set<String>>(
   (ref) => <String>{},
 );
 
+/// Current playback position for the active voice message.
+final voicePlaybackPositionProvider =
+    StateProvider<Duration>((ref) => Duration.zero);
+
+/// Current playback duration for the active voice message, if known.
+final voicePlaybackDurationProvider =
+    StateProvider<Duration?>((ref) => null);
+
 /// Simple playback state for logging and reasoning.
 enum VoicePlayState {
   idle,
@@ -53,6 +63,24 @@ class ChatVoicePlayer {
   final PttLocalAudioEngine _localAudio;
 
   int _playRequestId = 0;
+  StreamSubscription<Duration>? _positionSub;
+  StreamSubscription<Duration?>? _durationSub;
+
+  void _resetProgress() {
+    _positionSub?.cancel();
+    _positionSub = null;
+    _durationSub?.cancel();
+    _durationSub = null;
+    _ref.read(voicePlaybackPositionProvider.notifier).state =
+        Duration.zero;
+    _ref.read(voicePlaybackDurationProvider.notifier).state =
+        null;
+  }
+
+  void dispose() {
+    _positionSub?.cancel();
+    _durationSub?.cancel();
+  }
 
   Future<void> play({
     required String path,
@@ -73,6 +101,8 @@ class ChatVoicePlayer {
     if (!hasPath) {
       return;
     }
+
+    _resetProgress();
 
     if (messageId != null) {
       final errorNotifier =
@@ -111,6 +141,28 @@ class ChatVoicePlayer {
         },
       );
       final startedAt = DateTime.now();
+
+      _durationSub =
+          _localAudio.playbackDurationStream.listen(
+        (d) {
+          _ref
+              .read(
+                voicePlaybackDurationProvider.notifier,
+              )
+              .state = d;
+        },
+      );
+      _positionSub =
+          _localAudio.playbackPositionStream.listen(
+        (pos) {
+          _ref
+              .read(
+                voicePlaybackPositionProvider.notifier,
+              )
+              .state = pos;
+        },
+      );
+
       await _localAudio.playFromPath(
         path,
         rethrowOnError: true,
@@ -163,6 +215,7 @@ class ChatVoicePlayer {
     } finally {
       // Only clear if this is the latest play request.
       if (_playRequestId == requestId) {
+        _resetProgress();
         final globalNotifier =
             _ref.read(currentPlayingVoiceMessageIdProvider.notifier);
         final oldId = globalNotifier.state;
@@ -247,6 +300,7 @@ class ChatVoicePlayer {
           );
         }
       }
+      _resetProgress();
       return;
     }
 
@@ -256,5 +310,7 @@ class ChatVoicePlayer {
 
 final chatVoicePlayerProvider = Provider<ChatVoicePlayer>((ref) {
   final engine = ref.read(pttLocalAudioEngineProvider);
-  return ChatVoicePlayer(ref, engine);
+  final player = ChatVoicePlayer(ref, engine);
+  ref.onDispose(player.dispose);
+  return player;
 });

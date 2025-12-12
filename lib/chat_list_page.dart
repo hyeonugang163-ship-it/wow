@@ -12,6 +12,8 @@ class ChatListPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final messages = ref.watch(chatMessagesProvider);
+    final chatNotifier =
+        ref.read(chatMessagesProvider.notifier);
     final friends = ref.watch(friendListProvider);
 
     final Map<String, ChatMessage> lastByChatId = {};
@@ -53,6 +55,8 @@ class ChatListPage extends ConsumerWidget {
                 final entry = entries[index];
                 final chatId = entry.key;
                 final lastMessage = entry.value;
+                final unreadCount =
+                    chatNotifier.unreadCountForChat(chatId);
 
                 String? friendName;
                 final match =
@@ -110,11 +114,42 @@ class ChatListPage extends ConsumerWidget {
                         .textTheme
                         .bodySmall,
                   ),
-                  trailing: Text(
-                    timeLabel,
-                    style: Theme.of(context)
-                        .textTheme
-                        .labelSmall,
+                  trailing: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment:
+                        CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        timeLabel,
+                        style: Theme.of(context)
+                            .textTheme
+                            .labelSmall,
+                      ),
+                      const SizedBox(height: 4),
+                      if (unreadCount > 0)
+                        Container(
+                          padding:
+                              const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            borderRadius:
+                                BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            unreadCount.toString(),
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(
+                                  color:
+                                      AppColors.textPrimary,
+                                ),
+                          ),
+                        ),
+                    ],
                   ),
                   onTap: () {
                     context.push('/chat/$chatId');

@@ -83,6 +83,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     ref.watch(chatMessagesProvider);
     final currentPlayingMessageId =
         ref.watch(currentPlayingVoiceMessageIdProvider);
+    final playbackPosition =
+        ref.watch(voicePlaybackPositionProvider);
+    final playbackDuration =
+        ref.watch(voicePlaybackDurationProvider);
     final errorMessageIds =
         ref.watch(voicePlaybackErrorMessageIdsProvider);
     final notifier = ref.read(chatMessagesProvider.notifier);
@@ -355,6 +359,19 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                         '$minutes:${seconds.toString().padLeft(2, '0')}';
                   }
 
+                  double? playProgress;
+                  if (isPlaying) {
+                    final int durationMs =
+                        durationMillis ??
+                            playbackDuration?.inMilliseconds ??
+                            0;
+                    if (durationMs > 0) {
+                      playProgress =
+                          (playbackPosition.inMilliseconds / durationMs)
+                              .clamp(0.0, 1.0);
+                    }
+                  }
+
                   final colorScheme =
                       Theme.of(context).colorScheme;
                   final bubbleColor = (isError || isSendFailed)
@@ -363,8 +380,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                           ? AppColors.chatBubbleMe
                           : baseColor;
 
-                  IconData iconData;
-                  Color? iconColor;
+                  late final IconData iconData;
+                  late final Color iconColor;
                   if (isSendFailed) {
                     iconData = Icons.refresh;
                     iconColor = colorScheme.error;
@@ -394,13 +411,18 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                         }
                         if (hasPlaybackError) {
                           debugPrint(
-                            '[Chat] voice message tap ignored in error state '
+                            '[Chat] voice message tap retry from error state '
                             '(messageId=${message.id})',
                           );
-                          // TODO(LATER_MVP2): 오류 상태 버블 탭 시
-                          // 경로 재계산 또는 재다운로드를 시도하는
-                          // 재생 재시도 UX를 추가할 수 있다.
-                          return;
+                          final errorNotifier = ref.read(
+                            voicePlaybackErrorMessageIdsProvider.notifier,
+                          );
+                          if (errorNotifier.state.contains(message.id)) {
+                            final cleared = <String>{
+                              ...errorNotifier.state,
+                            }..remove(message.id);
+                            errorNotifier.state = cleared;
+                          }
                         }
                         if (!hasAudioPath) {
                           debugPrint(
@@ -464,12 +486,44 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 	                              ],
 	                            ),
 	                            if (statusText != null) ...[
+	                              if (isPlaying) ...[
+	                                const SizedBox(height: 6),
+	                                SizedBox(
+	                                  width: 160,
+	                                  child: LinearProgressIndicator(
+	                                    value: playProgress,
+	                                    minHeight: 2,
+	                                    backgroundColor:
+	                                        AppColors.surfaceElevated,
+	                                    valueColor:
+	                                        AlwaysStoppedAnimation<Color>(
+	                                      iconColor,
+	                                    ),
+	                                  ),
+	                                ),
+	                              ],
 	                              const SizedBox(height: 2),
 	                              Text(
 	                                statusText,
 	                                style: Theme.of(context)
 	                                    .textTheme
 	                                    .labelSmall,
+	                              ),
+	                            ],
+	                            if (statusText == null && isPlaying) ...[
+	                              const SizedBox(height: 6),
+	                              SizedBox(
+	                                width: 160,
+	                                child: LinearProgressIndicator(
+	                                  value: playProgress,
+	                                  minHeight: 2,
+	                                  backgroundColor:
+	                                      AppColors.surfaceElevated,
+	                                  valueColor:
+	                                      AlwaysStoppedAnimation<Color>(
+	                                    iconColor,
+	                                  ),
+	                                ),
 	                              ),
 	                            ],
 	                          ],

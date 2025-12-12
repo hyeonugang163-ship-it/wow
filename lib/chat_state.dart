@@ -2,6 +2,7 @@
 
 import 'dart:async';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyage/backend/backend_providers.dart';
@@ -17,6 +18,16 @@ class ChatMessagesNotifier extends StateNotifier<List<ChatMessage>> {
   final ChatRepository _repository;
   final Set<String> _loadedChatIds;
   StreamSubscription<List<ChatMessage>>? _watchSubscription;
+
+  Future<bool> _isOffline() async {
+    try {
+      final result = await Connectivity().checkConnectivity();
+      return result == ConnectivityResult.none;
+    } catch (e) {
+      debugPrint('[Chat][Connectivity] check error: $e');
+      return false;
+    }
+  }
 
   Future<void> _loadMessagesIfNeeded(String chatId) async {
     if (_loadedChatIds.contains(chatId)) {
@@ -188,6 +199,21 @@ class ChatMessagesNotifier extends StateNotifier<List<ChatMessage>> {
 
     () async {
       try {
+        if (await _isOffline()) {
+          PttLogger.log(
+            '[Chat][State]',
+            'sendVoice failed fast: offline',
+            meta: <String, Object?>{
+              'chatId': chatId,
+              'messageId': message.id,
+            },
+          );
+          _updateVoiceMessageSendStatus(
+            message.id,
+            MessageSendStatus.failed,
+          );
+          return;
+        }
         final ChatMessage remote =
             await _repository.sendVoice(
           chatId,
@@ -430,6 +456,21 @@ class ChatMessagesNotifier extends StateNotifier<List<ChatMessage>> {
     );
 
     try {
+      if (await _isOffline()) {
+        PttLogger.log(
+          '[Chat][State]',
+          'retryVoiceMessage failed fast: offline',
+          meta: <String, Object?>{
+            'messageId': messageId,
+            'chatId': target.chatId,
+          },
+        );
+        _updateVoiceMessageSendStatus(
+          messageId,
+          MessageSendStatus.failed,
+        );
+        return;
+      }
       final ChatMessage remote =
           await _repository.sendVoice(
         target.chatId,

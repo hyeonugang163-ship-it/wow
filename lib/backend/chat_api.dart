@@ -499,13 +499,19 @@ class RealChatApi implements ChatApi {
       String downloadUrl;
       try {
         final String uidForPath = fromUid ?? 'anonymous';
+        // Local recordings are produced as AAC-LC in an M4A (MP4) container.
+        // Keep the remote object extension/content-type consistent to avoid
+        // decoder mismatch during streaming playback.
         final ref = _storage
             .ref()
             .child('voice')
             .child(uidForPath)
             .child(chatId)
-            .child('${docRef.id}.aac');
-        await ref.putFile(file);
+            .child('${docRef.id}.m4a');
+        await ref.putFile(
+          file,
+          SettableMetadata(contentType: 'audio/mp4'),
+        );
         downloadUrl = await ref.getDownloadURL();
         debugPrint(
           '[FirestoreChatRepository] sendVoice upload success '

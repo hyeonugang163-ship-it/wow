@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyage/ptt_debug_log.dart';
 
@@ -36,7 +38,18 @@ List<PttLogEntry> _fromDebugEntries(
 /// v2 디버그 버퍼를 PttLogEntry 리스트로 노출하는 StreamProvider.
 final pttLogBufferStreamProvider =
     StreamProvider<List<PttLogEntry>>((ref) {
-  return pttDebugLogBufferV2.stream.map(_fromDebugEntries);
+  final initial =
+      _fromDebugEntries(pttDebugLogBufferV2.snapshot());
+  final updates =
+      pttDebugLogBufferV2.stream.map(_fromDebugEntries);
+  // StreamProvider는 첫 이벤트가 오기 전까지 loading 상태가 되므로,
+  // 스냅샷(빈 리스트 포함)을 먼저 한 번 내보내 무한 로딩을 방지한다.
+  Stream<List<PttLogEntry>> stream() async* {
+    yield initial;
+    yield* updates;
+  }
+
+  return stream();
 });
 
 /// 기존 pttLogBufferProvider 이름을 유지하면서,

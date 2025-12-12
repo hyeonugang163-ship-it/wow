@@ -108,6 +108,19 @@ class PttController {
       );
     }
     await _localAudio.startRecording();
+    if (_localAudio.sessionState != PttSessionState.recording) {
+      // 마이크 권한 없음 등으로 녹음이 시작되지 않았으면
+      // 네트워크/FGS/발행을 진행하지 않는다.
+      PttLogger.log(
+        '[PTT][Guard]',
+        'startTalk aborted: recording not started',
+        meta: <String, Object?>{
+          'mode': modeLabel,
+          'targetFriendId': targetIdLabel,
+        },
+      );
+      return;
+    }
     // 네트워크/즉시 재생 PTT는 Walkie 모드에서만 수행한다.
     // Manner 모드에서는 로컬 녹음/음성 노트만 사용한다.
     if (mode == PttMode.walkie) {

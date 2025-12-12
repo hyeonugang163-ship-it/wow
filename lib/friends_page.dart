@@ -33,28 +33,46 @@ class FriendsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final friends = ref.watch(friendListProvider);
+    final currentTargetId =
+        ref.watch(currentPttFriendIdProvider);
+    final allowMap = ref.watch(friendPttAllowProvider);
+    final blockMap = ref.watch(friendBlockProvider);
     // 채팅 요약 정보 업데이트를 위해 watch만 걸어 둔다.
     ref.watch(chatMessagesProvider);
     final chatNotifier =
         ref.read(chatMessagesProvider.notifier);
 
+    final orderedFriends = currentTargetId == null
+        ? friends
+        : [
+            ...friends.where((f) => f.id == currentTargetId),
+            ...friends.where((f) => f.id != currentTargetId),
+          ];
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('친구'),
       ),
-      body: friends.isEmpty
+      body: orderedFriends.isEmpty
           ? const Center(
               child: Text('아직 친구가 없습니다'),
             )
           : ListView.builder(
               padding: const EdgeInsets.symmetric(vertical: 8),
-              itemCount: friends.length,
+              itemCount: orderedFriends.length,
               itemBuilder: (context, index) {
-                final friend = friends[index];
+                final friend = orderedFriends[index];
                 final chatId = friend.id;
                 final name = friend.name;
                 final initial =
                     name.isNotEmpty ? name.characters.first : '?';
+
+                final bool isCurrentTarget =
+                    currentTargetId == friend.id;
+                final bool localAllowed =
+                    allowMap[friend.id] ?? false;
+                final bool localBlocked =
+                    blockMap[friend.id] ?? false;
 
                 final ChatMessage? lastMessage =
                     chatNotifier.lastMessageForChat(chatId);
@@ -103,11 +121,67 @@ class FriendsPage extends ConsumerWidget {
                           ),
                     ),
                   ),
-                  title: Text(
-                    friend.name,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyLarge,
+                  title: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          friend.name,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyLarge,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (localBlocked)
+                        Padding(
+                          padding:
+                              const EdgeInsets.only(left: 6),
+                          child: Icon(
+                            Icons.block,
+                            size: 14,
+                            color: AppColors.error,
+                          ),
+                        )
+                      else if (localAllowed)
+                        Padding(
+                          padding:
+                              const EdgeInsets.only(left: 6),
+                          child: Icon(
+                            Icons.flash_on_outlined,
+                            size: 14,
+                            color: AppColors.accent,
+                          ),
+                        ),
+                      if (isCurrentTarget) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color:
+                                AppColors.accent.withAlpha(31),
+                            borderRadius:
+                                BorderRadius.circular(10),
+                            border: Border.all(
+                              color: AppColors.accent
+                                  .withAlpha(128),
+                            ),
+                          ),
+                          child: Text(
+                            '무전대상',
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(
+                                  color: AppColors.accent,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   subtitle: Text(
                     subtitleText,
@@ -143,6 +217,36 @@ class FriendsPage extends ConsumerWidget {
                                 ),
                           ),
                         ),
+                      IconButton(
+                        icon: Icon(
+                          isCurrentTarget
+                              ? Icons.mic
+                              : Icons.mic_none_outlined,
+                        ),
+                        tooltip: isCurrentTarget
+                            ? '현재 무전 대상'
+                            : '무전 대상으로 설정',
+                        color: isCurrentTarget
+                            ? AppColors.accent
+                            : AppColors.textSecondary,
+                        onPressed: () {
+                          ref
+                              .read(
+                                currentPttFriendIdProvider.notifier,
+                              )
+                              .state = friend.id;
+                          ScaffoldMessenger.of(context)
+                              .showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                '"${friend.name}"님이 현재 무전 대상입니다.',
+                              ),
+                              duration:
+                                  const Duration(seconds: 2),
+                            ),
+                          );
+                        },
+                      ),
                       IconButton(
                         icon: const Icon(Icons.more_vert),
                         tooltip: '친구 설정',

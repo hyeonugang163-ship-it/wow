@@ -45,6 +45,16 @@ class PttLocalAudioEngine {
   int? get lastPlaybackDurationMillis =>
       _lastPlaybackDuration?.inMilliseconds;
 
+  /// Playback position stream from the shared audio player.
+  ///
+  /// Used by chat UI to render a lightweight progress indicator.
+  Stream<Duration> get playbackPositionStream =>
+      _player.positionStream;
+
+  /// Playback duration stream from the shared audio player.
+  Stream<Duration?> get playbackDurationStream =>
+      _player.durationStream;
+
   bool get _isSupportedPlatform =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
