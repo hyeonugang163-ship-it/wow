@@ -283,20 +283,20 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
   /// Last time PTT was started (for global cooldown).
   DateTime? _lastPttStartedAt;
 
-  /// Recent PTT start timestamps per friend for soft rate-limit logging.
+  /// Recent PTT start timestamps per friend for spam protection.
   ///
-  /// Used only for analytics / future policy hooks; 현재 단계에서는
-  /// 실제 블록 대신 로그만 남긴다.
+  /// Used for both soft logging and hard friend-level cooldowns.
   final Map<String, List<DateTime>> _friendPttStarts = {};
+  final Map<String, DateTime> _friendBurstBlockedUntil = {};
   DateTime? _lastUiHoldAt;
 
-  Future<void> startTalk({DateTime? uiHoldAt}) async {
+  Future<bool> startTalk({DateTime? uiHoldAt}) async {
     if (_isTalking) {
       PttLogger.log(
         '[PTT][Guard]',
         'startTalk ignored because session already active',
       );
-      return;
+      return false;
     }
 
     final requestedMode = _ref.read(pttModeProvider);
@@ -306,11 +306,30 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
       _ref.read(pttUiEventProvider.notifier).emit(
             PttUiEvents.noFriendSelected(mode: requestedMode),
           );
-      return;
+      return false;
     }
 
     // targetFriendId는 위에서 null 가드 후 여기서는 항상 non-null이다.
     final now = DateTime.now();
+    if (requestedMode == PttMode.walkie) {
+      final blockedUntil = _friendBurstBlockedUntil[targetFriendId];
+      if (blockedUntil != null && now.isBefore(blockedUntil)) {
+        PttLogger.log(
+          '[PTT][RateLimit]',
+          'startTalk blocked by friend burst cooldown',
+          meta: <String, Object?>{
+            'friendId': targetFriendId,
+            'until': blockedUntil.toIso8601String(),
+          },
+        );
+        _ref.read(pttMetricsProvider.notifier).recordError(
+              friendId: targetFriendId,
+              mode: requestedMode,
+              reason: 'burst_cooldown',
+            );
+        return false;
+      }
+    }
     final pttAllowMap = _ref.read(friendPttAllowProvider);
     final peerAllowMap = _ref.read(peerWalkieAllowProvider);
 
@@ -361,7 +380,7 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
           _ref.read(pttUiEventProvider.notifier).emit(
                 PttUiEvents.friendBlocked(friendId: targetFriendId),
               );
-          return;
+          return false;
         case PolicyBlockReason.cooldown:
           final sinceLastMs = decision.sinceLastMs ?? 0;
           final minIntervalMs =
@@ -388,14 +407,19 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
                   mode: requestedMode,
                 ),
               );
-          return;
+          return false;
         case null:
           break;
       }
     }
 
-    final windowSeconds = 60;
-    const softLimit = 20;
+    // Friend-level spam protection:
+    // If a user spams walkie starts within a short window,
+    // apply a temporary cooldown for that friend.
+    const windowSeconds = 10;
+    const hardLimit = 6;
+    const burstCooldownSeconds = 8;
+    const softLimit = 4;
 
     final previous = _friendPttStarts[targetFriendId] ?? <DateTime>[];
     final recent = previous
@@ -406,25 +430,39 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
     recent.add(now);
     _friendPttStarts[targetFriendId] = recent;
 
+    if (requestedMode == PttMode.walkie &&
+        recent.length > hardLimit) {
+      final until =
+          now.add(const Duration(seconds: burstCooldownSeconds));
+      _friendBurstBlockedUntil[targetFriendId] = until;
+      PttLogger.log(
+        '[PTT][RateLimit]',
+        'friend burst hard cooldown applied',
+        meta: <String, Object?>{
+          'friendId': targetFriendId,
+          'count': recent.length,
+          'windowSeconds': windowSeconds,
+          'cooldownSeconds': burstCooldownSeconds,
+        },
+      );
+      _ref.read(pttMetricsProvider.notifier).recordError(
+            friendId: targetFriendId,
+            mode: requestedMode,
+            reason: 'burst_hard',
+          );
+      return false;
+    }
+
     if (recent.length > softLimit) {
       PttLogger.log(
         '[PTT][RateLimit]',
-        'friend burst',
+        'friend burst soft',
         meta: <String, Object?>{
           'friendId': targetFriendId,
           'count': recent.length,
           'windowSeconds': windowSeconds,
         },
       );
-      _ref.read(pttUiEventProvider.notifier).emit(
-            PttUiEvents.rateLimitSoft(
-              friendId: targetFriendId,
-              count: recent.length,
-              windowSeconds: windowSeconds,
-            ),
-          );
-      // TODO(LATER_MVP2): 짧은 시간 내 과도한 무전 시
-      // 하드 블록 또는 추가 경고 UI를 도입할지 검토한다.
     }
 
     if (requestedMode == PttMode.manner) {
@@ -498,6 +536,7 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
       _lastPttStartedAt = now;
       _isTalking = true;
       state = PttTalkState.talking;
+      return true;
     } catch (e) {
       _ref.read(pttMetricsProvider.notifier).recordError(
             friendId: targetFriendId,
@@ -513,6 +552,7 @@ class PttControllerNotifier extends StateNotifier<PttTalkState> {
           'error': e.toString(),
         },
       );
+      return false;
     }
   }
 

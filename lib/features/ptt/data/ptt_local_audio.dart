@@ -250,6 +250,12 @@ class PttLocalAudioEngine {
       _lastPlaybackDuration = _player.duration;
       _sessionState = PttSessionState.playing;
       await _player.play();
+      // Wait until playback completes or is stopped.
+      await _player.processingStateStream.firstWhere(
+        (state) =>
+            state == ProcessingState.completed ||
+            state == ProcessingState.idle,
+      );
       _sessionState = PttSessionState.idle;
     } catch (e) {
       debugPrint('[AudioPlayer] play error: $e');
@@ -283,6 +289,11 @@ class PttLocalAudioEngine {
       await _player.setVolume(volume);
       _sessionState = PttSessionState.playing;
       await _player.play();
+      await _player.processingStateStream.firstWhere(
+        (state) =>
+            state == ProcessingState.completed ||
+            state == ProcessingState.idle,
+      );
     } catch (e) {
       debugPrint('[PTT][LocalAudio] playBeep error: $e');
     } finally {

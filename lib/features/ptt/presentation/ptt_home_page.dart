@@ -40,10 +40,19 @@ class PttHomePage extends ConsumerStatefulWidget {
 
 class _PttHomePageState extends ConsumerState<PttHomePage>
     with SingleTickerProviderStateMixin {
+  static const Duration _minHoldDuration =
+      Duration(milliseconds: 300);
+  static const Duration _releaseTailDuration =
+      Duration(milliseconds: 200);
+
   DateTime? _pressStartedAt;
   bool _isPressed = false;
   bool _showDebugOverlay = false;
   late final AnimationController _holdProgressController;
+  Timer? _minHoldTimer;
+  Timer? _releaseTailTimer;
+  bool _talkStartedForPress = false;
+  int _pressSequence = 0;
 
   @override
   void initState() {
@@ -54,8 +63,7 @@ class _PttHomePageState extends ConsumerState<PttHomePage>
     );
   }
 
-  Future<void> _handlePressStart(
-    BuildContext context,
+  Future<bool> _handlePressStart(
     DateTime holdTriggeredAt,
   ) async {
     final ref = this.ref;
@@ -67,7 +75,7 @@ class _PttHomePageState extends ConsumerState<PttHomePage>
       ref.read(pttUiEventProvider.notifier).emit(
             PttUiEvents.noFriendSelected(mode: mode),
           );
-      return;
+      return false;
     }
 
     final pttAllowMap = ref.read(friendPttAllowProvider);
@@ -86,12 +94,13 @@ class _PttHomePageState extends ConsumerState<PttHomePage>
       }
     }
 
-    await ref
+    final started = await ref
         .read(pttControllerProvider.notifier)
         .startTalk(uiHoldAt: holdTriggeredAt);
+    return started;
   }
 
-  Future<void> _handlePressEnd(BuildContext context) async {
+  Future<void> _handlePressEnd() async {
     final ref = this.ref;
     final mode = ref.read(pttModeProvider);
     final currentFriendId = ref.read(currentPttFriendIdProvider);
@@ -109,10 +118,21 @@ class _PttHomePageState extends ConsumerState<PttHomePage>
 
   void _onPressDown(BuildContext context) {
     final now = DateTime.now();
+    final ref = this.ref;
+    _releaseTailTimer?.cancel();
+    _releaseTailTimer = null;
+    _pressSequence += 1;
     setState(() {
       _pressStartedAt = now;
       _isPressed = true;
     });
+    _talkStartedForPress = false;
+    final alreadyTalking =
+        ref.read(pttControllerProvider.notifier).isTalking;
+    if (alreadyTalking) {
+      _talkStartedForPress = true;
+      return;
+    }
 
     if (kDebugMode) {
       debugPrint('[PTT][UI] press down');
@@ -125,11 +145,30 @@ class _PttHomePageState extends ConsumerState<PttHomePage>
       },
     );
 
-    unawaited(_handlePressStart(context, now));
+    _minHoldTimer?.cancel();
+    final pressSeq = _pressSequence;
+    _minHoldTimer = Timer(_minHoldDuration, () {
+      if (!mounted || !_isPressed) {
+        return;
+      }
+      unawaited(() async {
+        final started =
+            await _handlePressStart(DateTime.now());
+        if (!mounted || pressSeq != _pressSequence || !_isPressed) {
+          if (started) {
+            unawaited(_handlePressEnd());
+          }
+          return;
+        }
+        _talkStartedForPress = started;
+      }());
+    });
   }
 
   Future<void> _onPressEnd(BuildContext context) async {
     final startedAt = _pressStartedAt;
+    _minHoldTimer?.cancel();
+    _minHoldTimer = null;
     setState(() {
       _isPressed = false;
       _pressStartedAt = null;
@@ -148,11 +187,23 @@ class _PttHomePageState extends ConsumerState<PttHomePage>
       },
     );
 
-    await _handlePressEnd(context);
+    if (!_talkStartedForPress) {
+      return;
+    }
+
+    _releaseTailTimer?.cancel();
+    _releaseTailTimer = Timer(_releaseTailDuration, () {
+      if (!mounted) {
+        return;
+      }
+      unawaited(_handlePressEnd());
+    });
   }
 
   @override
   void dispose() {
+    _minHoldTimer?.cancel();
+    _releaseTailTimer?.cancel();
     _holdProgressController.dispose();
     super.dispose();
   }
@@ -533,27 +584,7 @@ class _PttHomePageState extends ConsumerState<PttHomePage>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    AnimatedSwitcher(
-                      duration: AppMotion.fast,
-                      child: Text(
-                        _isPressed || isTalking
-                            ? '녹음 중… 손을 떼면 전송'
-                            : '꾹 눌러 말하세요',
-                        key: ValueKey<String>(
-                          '${_isPressed}_${isTalking}_${hasTarget}_${mode.name}',
-                        ),
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodyMedium
-                            ?.copyWith(
-                              color: (_isPressed || isTalking)
-                                  ? AppColors.error
-                                  : AppColors.textSecondary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 4),
                     AnimatedBuilder(
                       animation: _holdProgressController,
                       builder: (context, _) {
@@ -580,35 +611,16 @@ class _PttHomePageState extends ConsumerState<PttHomePage>
                                 : (isTalking || _isPressed)
                                     ? Icons.mic
                                     : Icons.mic_none;
-
-                        final String centerLabel =
-                            !hasTarget
-                                ? '대상 선택'
-                                : isFriendBlocked
-                                    ? '차단됨'
-                                    : (isTalking || _isPressed)
-                                        ? '녹음 중…'
-                                        : '꾹 누르기';
-
-                        final tooltipMessage = !hasTarget
-                            ? '먼저 친구를 선택하세요'
-                            : isFriendBlocked
-                                ? '차단된 친구입니다'
-                                : '꾹 눌러 말하기';
-
-                        return Tooltip(
-                          message: tooltipMessage,
-                          child: Listener(
-                            behavior: HitTestBehavior.opaque,
-                            onPointerDown: (_) =>
-                                _onPressDown(context),
-                            onPointerUp: (_) =>
-                                unawaited(_onPressEnd(context)),
-                            onPointerCancel: (_) =>
-                                unawaited(_onPressEnd(context)),
-                            child: Stack(
-                              alignment: Alignment.center,
-                              children: [
+                        return Listener(
+                          behavior: HitTestBehavior.opaque,
+                          onPointerDown: (_) => _onPressDown(context),
+                          onPointerUp: (_) =>
+                              unawaited(_onPressEnd(context)),
+                          onPointerCancel: (_) =>
+                              unawaited(_onPressEnd(context)),
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
                               if (isActive)
                                 Container(
                                   width: 244,
@@ -673,46 +685,28 @@ class _PttHomePageState extends ConsumerState<PttHomePage>
                                   ],
                                 ),
                                 alignment: Alignment.center,
-                                child: Column(
-                                  mainAxisSize:
-                                      MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      centerIcon,
-                                      size: 44,
-                                      color: AppColors.textPrimary,
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      centerLabel,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleMedium
-                                          ?.copyWith(
-                                            color: AppColors.textPrimary,
-                                          ),
-                                    ),
-                                  ],
+                                child: Icon(
+                                  centerIcon,
+                                  size: 44,
+                                  color: AppColors.textPrimary,
                                 ),
                               ),
-                              ],
-                            ),
+                            ],
                           ),
                         );
                       },
                     ),
                     const SizedBox(height: 12),
-                    Text(
-                      hasTarget
-                          ? '누르는 동안 바로 녹음됩니다.'
-                          : 'Friends에서 무전 대상을 먼저 골라주세요.',
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(
-                            color: AppColors.textSecondary,
-                          ),
-                    ),
+                    if (!hasTarget)
+                      Text(
+                        'Friends에서 무전 대상을 먼저 골라주세요.',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(
+                              color: AppColors.textSecondary,
+                            ),
+                      ),
                   ],
                 ),
               ),
