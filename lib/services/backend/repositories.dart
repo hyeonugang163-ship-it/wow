@@ -1,0 +1,817 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:voyage/services/backend/api_result.dart';
+import 'package:voyage/services/backend/auth_api.dart';
+import 'package:voyage/services/backend/chat_api.dart';
+import 'package:voyage/services/backend/friend_api.dart';
+import 'package:voyage/services/backend/ptt_media_api.dart';
+import 'package:voyage/features/auth/domain/app_user.dart';
+import 'package:voyage/features/auth/application/auth_state.dart';
+import 'package:voyage/features/chat/domain/chat_message.dart';
+import 'package:voyage/features/friends/domain/friend.dart';
+import 'package:voyage/features/ptt/data/ptt_prefs.dart';
+import 'package:voyage/features/ptt/application/ptt_debug_log.dart';
+import 'package:voyage/features/ptt/application/ptt_ui_event.dart';
+
+abstract class AuthRepository {
+  Future<AuthState> loadInitialAuthState();
+
+  Future<AuthState> completeOnboarding(
+    String displayName,
+    String avatarEmoji,
+  );
+
+  Future<void> signOut();
+}
+
+abstract class FriendRepository {
+  Future<List<Friend>> loadFriends();
+
+  Future<Map<String, bool>> loadPeerWalkieAllowMap();
+
+  Future<void> syncPttAllow(String friendId, bool allow);
+
+  /// 친구별 무전 허용 여부를 설정한다.
+  ///
+  /// 현재는 Fake/로컬 구현에서만 사용되며,
+  /// 추후 실제 서버 동기화 시 연동될 수 있다.
+  Future<void> setWalkieAllowed({
+    required String friendId,
+    required bool allowed,
+  });
+
+  Future<void> block(String friendId);
+
+  Future<void> unblock(String friendId);
+}
+
+abstract class ChatRepository {
+  Future<List<ChatMessage>> loadMessages(String chatId);
+
+  Future<ChatMessage> sendText(String chatId, String text);
+
+  Future<ChatMessage> sendVoice(
+    String chatId,
+    String localPath,
+    int durationMillis,
+  );
+
+  Future<void> markMessagesAsSeen(
+    String chatId,
+    List<String> messageIds,
+  );
+
+  Stream<List<ChatMessage>> watchMessages(String chatId);
+}
+
+abstract class PttMediaRepository {
+  Future<String> uploadVoice(
+    String localPath, {
+    String? chatId,
+    String? friendId,
+  });
+
+  Future<String> resolvePlaybackUrl(String remoteKey);
+}
+
+void _logApiError(String scope, ApiError error) {
+  PttLogger.log(
+    '[Backend][Repository][Error]',
+    scope,
+    meta: <String, Object?>{
+      'type': error.type.name,
+      if (error.statusCode != null) 'statusCode': error.statusCode!,
+      if (error.code != null) 'code': error.code!,
+    },
+  );
+}
+
+void _emitGenericError(Ref ref, {String? code}) {
+  ref.read(pttUiEventProvider.notifier).emit(
+        PttUiEvents.genericError(code: code),
+      );
+}
+
+class FakeAuthRepository implements AuthRepository {
+  FakeAuthRepository(this._api, this._ref);
+
+  final AuthApi _api;
+  final Ref _ref;
+
+  static AppUser? _cachedUser;
+
+  @override
+  Future<AuthState> loadInitialAuthState() async {
+    final prefs = _ref.read(pttPrefsProvider);
+    final bool onboardingCompleted =
+        prefs.loadOnboardingCompleted();
+    final existing = _cachedUser;
+    if (existing != null) {
+      PttLogger.log(
+        '[Auth]',
+        'loadInitialAuthState existing user',
+        meta: <String, Object?>{
+          'userId': existing.id,
+        },
+      );
+      return AuthState(
+        status: AuthStatus.signedIn,
+        user: existing,
+        isLoading: false,
+      );
+    }
+
+    if (onboardingCompleted) {
+      final userId =
+          prefs.loadUserId() ?? 'user_local';
+      final displayName =
+          prefs.loadDisplayName() ?? 'User';
+      final avatarEmoji =
+          prefs.loadAvatarEmoji() ?? '😄';
+
+      final user = AppUser(
+        id: userId,
+        displayName: displayName,
+        avatarEmoji: avatarEmoji,
+        createdAt: DateTime.now(),
+      );
+      _cachedUser = user;
+
+      PttLogger.log(
+        '[Auth]',
+        'loadInitialAuthState from prefs (onboardingCompleted=true)',
+        meta: <String, Object?>{
+          'userId': userId,
+        },
+      );
+
+      return AuthState(
+        status: AuthStatus.signedIn,
+        user: user,
+        isLoading: false,
+      );
+    }
+
+    PttLogger.log(
+      '[Auth]',
+      'loadInitialAuthState no user, onboarding',
+    );
+
+    return const AuthState(
+      status: AuthStatus.onboarding,
+      user: null,
+      isLoading: false,
+    );
+  }
+
+  @override
+  Future<AuthState> completeOnboarding(
+    String displayName,
+    String avatarEmoji,
+  ) async {
+    PttLogger.log(
+      '[Auth]',
+      'completeOnboarding start',
+      meta: <String, Object?>{
+        'displayNameLen': displayName.length,
+      },
+    );
+
+    final String deviceId = DateTime.now().millisecondsSinceEpoch.toString();
+    try {
+      final result = await _api.loginWithToken(deviceId);
+      final error = result.error;
+      if (error != null) {
+        _logApiError('AuthRepository.completeOnboarding.login', error);
+        _emitGenericError(_ref, code: error.code);
+      }
+    } catch (e) {
+      _logApiError(
+        'AuthRepository.completeOnboarding.login.exception',
+        const ApiError(type: ApiErrorType.unknown),
+      );
+      _emitGenericError(_ref, code: 'auth_login_exception');
+      PttLogger.log(
+        '[Auth]',
+        'completeOnboarding login exception',
+        meta: <String, Object?>{
+          'error': e.toString(),
+        },
+      );
+    }
+
+    final now = DateTime.now();
+    final user = AppUser(
+      id: 'user_$deviceId',
+      displayName: displayName,
+      avatarEmoji: avatarEmoji,
+      createdAt: now,
+    );
+    _cachedUser = user;
+
+    PttLogger.log(
+      '[Auth]',
+      'completeOnboarding success',
+      meta: <String, Object?>{
+        'userId': user.id,
+      },
+    );
+
+    return AuthState(
+      status: AuthStatus.signedIn,
+      user: user,
+      isLoading: false,
+    );
+  }
+
+  @override
+  Future<void> signOut() async {
+    _cachedUser = null;
+    PttLogger.log(
+      '[Auth]',
+      'signOut',
+    );
+  }
+}
+
+class FakeFriendRepository implements FriendRepository {
+  FakeFriendRepository(this._api, this._ref);
+
+  final FriendApi _api;
+  final Ref _ref;
+
+  @override
+  Future<List<Friend>> loadFriends() async {
+    final result = await _api.fetchFriends();
+    final error = result.error;
+    if (error != null) {
+      _logApiError('FriendRepository.loadFriends', error);
+      _emitGenericError(_ref, code: error.code);
+      return <Friend>[];
+    }
+    return result.data ?? <Friend>[];
+  }
+
+  @override
+  Future<Map<String, bool>> loadPeerWalkieAllowMap() async {
+    // Fake 환경에서는 peer allow가 아직 없으므로 빈 맵을 반환한다.
+    return const <String, bool>{};
+  }
+
+  @override
+  Future<void> syncPttAllow(String friendId, bool allow) async {
+    // 기존 API 호출은 그대로 유지하되,
+    // 상위에서 setWalkieAllowed를 통해 접근하는 것을 권장한다.
+    final result = await _api.updateFriendPttAllow(friendId, allow);
+    final error = result.error;
+    if (error != null) {
+      _logApiError('FriendRepository.syncPttAllow', error);
+      _emitGenericError(_ref, code: error.code);
+    }
+  }
+
+  @override
+  Future<void> setWalkieAllowed({
+    required String friendId,
+    required bool allowed,
+  }) async {
+    await syncPttAllow(friendId, allowed);
+  }
+
+  @override
+  Future<void> block(String friendId) async {
+    final result = await _api.blockFriend(friendId);
+    final error = result.error;
+    if (error != null) {
+      _logApiError('FriendRepository.block', error);
+      _emitGenericError(_ref, code: error.code);
+    }
+  }
+
+  @override
+  Future<void> unblock(String friendId) async {
+    final result = await _api.unblockFriend(friendId);
+    final error = result.error;
+    if (error != null) {
+      _logApiError('FriendRepository.unblock', error);
+      _emitGenericError(_ref, code: error.code);
+    }
+  }
+}
+
+class FakeChatRepository implements ChatRepository {
+  FakeChatRepository(this._api, this._ref);
+
+  final ChatApi _api;
+  final Ref _ref;
+
+  @override
+  Future<List<ChatMessage>> loadMessages(String chatId) async {
+    final result = await _api.fetchMessages(chatId);
+    final error = result.error;
+    if (error != null) {
+      _logApiError('ChatRepository.loadMessages', error);
+      _emitGenericError(_ref, code: error.code);
+      return <ChatMessage>[];
+    }
+    return result.data ?? <ChatMessage>[];
+  }
+
+  @override
+  Stream<List<ChatMessage>> watchMessages(String chatId) {
+    debugPrint(
+      '[FakeChatRepository] watchMessages start chatId=$chatId',
+    );
+    return _api.watchMessages(chatId);
+  }
+
+  @override
+  Future<void> markMessagesAsSeen(
+    String chatId,
+    List<String> messageIds,
+  ) async {
+    // NOTE: Fake 환경에서는 별도 저장소 동기화가 필요하지 않으므로
+    // 인터페이스 호환을 위해 no-op으로 둔다.
+    debugPrint(
+      '[FakeChatRepository] markMessagesAsSeen chatId=$chatId '
+      'ids=${messageIds.length}',
+    );
+  }
+
+  @override
+  Future<ChatMessage> sendText(String chatId, String text) async {
+    final result = await _api.sendTextMessage(chatId, text);
+    final error = result.error;
+    if (error != null) {
+      _logApiError('ChatRepository.sendText', error);
+      _emitGenericError(_ref, code: error.code);
+      throw Exception('ChatRepository.sendText failed: ${error.type}');
+    }
+    return result.data!;
+  }
+
+  @override
+  Future<ChatMessage> sendVoice(
+    String chatId,
+    String localPath,
+    int durationMillis,
+  ) async {
+    final result =
+        await _api.sendVoiceMessage(chatId, localPath, durationMillis);
+    final error = result.error;
+    if (error != null) {
+      _logApiError('ChatRepository.sendVoice', error);
+      _emitGenericError(_ref, code: error.code);
+      throw Exception('ChatRepository.sendVoice failed: ${error.type}');
+    }
+    return result.data!;
+  }
+}
+
+class FakePttMediaRepository implements PttMediaRepository {
+  FakePttMediaRepository(this._api, this._ref);
+
+  final PttMediaApi _api;
+  final Ref _ref;
+
+  @override
+  Future<String> uploadVoice(
+    String localPath, {
+    String? chatId,
+    String? friendId,
+  }) async {
+    final result = await _api.uploadVoiceFile(localPath);
+    final error = result.error;
+    if (error != null) {
+      _logApiError('PttMediaRepository.uploadVoice', error);
+      _emitGenericError(_ref, code: error.code);
+      throw Exception('PttMediaRepository.uploadVoice failed: ${error.type}');
+    }
+
+    PttLogger.log(
+      '[Backend][Repository][PttMedia]',
+      'uploadVoice',
+      meta: <String, Object?>{
+        'localPathHash': localPath.hashCode,
+        if (chatId != null) 'chatIdHash': chatId.hashCode,
+        if (friendId != null) 'friendIdHash': friendId.hashCode,
+      },
+    );
+
+    return result.data!;
+  }
+
+  @override
+  Future<String> resolvePlaybackUrl(String remoteKey) async {
+    final result = await _api.getSignedUrl(remoteKey);
+    final error = result.error;
+    if (error != null) {
+      _logApiError('PttMediaRepository.resolvePlaybackUrl', error);
+      _emitGenericError(_ref, code: error.code);
+      throw Exception(
+        'PttMediaRepository.resolvePlaybackUrl failed: ${error.type}',
+      );
+    }
+    return result.data!;
+  }
+}
+
+class RealFriendRepository implements FriendRepository {
+  RealFriendRepository(this._api, this._ref);
+
+  final FriendApi _api;
+  final Ref _ref;
+
+  @override
+  Future<List<Friend>> loadFriends() async {
+    final result = await _api.fetchFriends();
+    final error = result.error;
+    if (error != null) {
+      _logApiError('RealFriendRepository.loadFriends', error);
+      _emitGenericError(_ref, code: error.code);
+      return <Friend>[];
+    }
+    return result.data ?? <Friend>[];
+  }
+
+  @override
+  Future<Map<String, bool>> loadPeerWalkieAllowMap() async {
+    // Real backend 계약이 준비되면 peer allow map을 로드하도록 확장한다.
+    return const <String, bool>{};
+  }
+
+  @override
+  Future<void> syncPttAllow(String friendId, bool allow) async {
+    // 기존 API 호출은 그대로 유지하되,
+    // 상위에서 setWalkieAllowed를 통해 접근하는 것을 권장한다.
+    final result = await _api.updateFriendPttAllow(friendId, allow);
+    final error = result.error;
+    if (error != null) {
+      _logApiError('RealFriendRepository.syncPttAllow', error);
+      _emitGenericError(_ref, code: error.code);
+    }
+  }
+
+  @override
+  Future<void> setWalkieAllowed({
+    required String friendId,
+    required bool allowed,
+  }) async {
+    await syncPttAllow(friendId, allowed);
+  }
+
+  @override
+  Future<void> block(String friendId) async {
+    final result = await _api.blockFriend(friendId);
+    final error = result.error;
+    if (error != null) {
+      _logApiError('RealFriendRepository.block', error);
+      _emitGenericError(_ref, code: error.code);
+    }
+  }
+
+  @override
+  Future<void> unblock(String friendId) async {
+    final result = await _api.unblockFriend(friendId);
+    final error = result.error;
+    if (error != null) {
+      _logApiError('RealFriendRepository.unblock', error);
+      _emitGenericError(_ref, code: error.code);
+    }
+  }
+}
+
+class RealChatRepository implements ChatRepository {
+  RealChatRepository(this._api, this._ref);
+
+  final ChatApi _api;
+  final Ref _ref;
+
+  @override
+  Future<List<ChatMessage>> loadMessages(String chatId) async {
+    debugPrint(
+      '[FirestoreChatRepository] fetchMessages chatId=$chatId',
+    );
+    final result = await _api.fetchMessages(chatId);
+    final error = result.error;
+    if (error != null) {
+      debugPrint(
+        '[FirestoreChatRepository] fetchMessages error: ${error.type.name}',
+      );
+      _logApiError('RealChatRepository.loadMessages', error);
+      _emitGenericError(_ref, code: error.code);
+      return <ChatMessage>[];
+    }
+    final messages = result.data ?? <ChatMessage>[];
+    debugPrint(
+      '[FirestoreChatRepository] fetchMessages success count=${messages.length}',
+    );
+    return messages;
+  }
+
+  @override
+  Future<ChatMessage> sendText(String chatId, String text) async {
+    debugPrint(
+      '[FirestoreChatRepository] try sendText '
+      'chatId=$chatId textLength=${text.length}',
+    );
+    final result = await _api.sendTextMessage(chatId, text);
+    final error = result.error;
+    if (error != null) {
+      debugPrint(
+        '[FirestoreChatRepository] sendText error: ${error.type.name}',
+      );
+      _logApiError('RealChatRepository.sendText', error);
+      _emitGenericError(_ref, code: error.code);
+      throw Exception(
+        'RealChatRepository.sendText failed: ${error.type}',
+      );
+    }
+    final ChatMessage message = result.data!;
+    debugPrint(
+      '[FirestoreChatRepository] sendText success docId=${message.id} '
+      'fromUid=${message.fromUid ?? 'null'}',
+    );
+    return message;
+  }
+
+  @override
+  Future<void> markMessagesAsSeen(
+    String chatId,
+    List<String> messageIds,
+  ) async {
+    if (messageIds.isEmpty) {
+      return;
+    }
+    debugPrint(
+      '[FirestoreChatRepository] markMessagesAsSeen '
+      'chatId=$chatId ids=${messageIds.length}',
+    );
+    try {
+      await _api.markMessagesAsSeen(
+        chatId: chatId,
+        messageIds: messageIds,
+      );
+      debugPrint(
+        '[FirestoreChatRepository] markMessagesAsSeen success '
+        'chatId=$chatId ids=${messageIds.length}',
+      );
+    } catch (e) {
+      debugPrint(
+        '[FirestoreChatRepository] markMessagesAsSeen error: $e',
+      );
+      _emitGenericError(_ref, code: 'chat_mark_seen_error');
+    }
+  }
+
+  @override
+  Stream<List<ChatMessage>> watchMessages(String chatId) {
+    debugPrint(
+      '[FirestoreChatRepository] watchMessages start chatId=$chatId',
+    );
+    return _api.watchMessages(chatId).map((messages) {
+      debugPrint(
+        '[FirestoreChatRepository] watchMessages event '
+        'chatId=$chatId count=${messages.length}',
+      );
+      return messages;
+    });
+  }
+
+  @override
+  Future<ChatMessage> sendVoice(
+    String chatId,
+    String localPath,
+    int durationMillis,
+  ) async {
+    debugPrint(
+      '[FirestoreChatRepository] try sendVoice '
+      'chatId=$chatId pathHash=${localPath.hashCode} '
+      'durationMillis=$durationMillis',
+    );
+    final result = await _api.sendVoiceMessage(
+      chatId,
+      localPath,
+      durationMillis,
+    );
+    final error = result.error;
+    if (error != null) {
+      debugPrint(
+        '[FirestoreChatRepository] sendVoice error: ${error.type.name}',
+      );
+      _logApiError('RealChatRepository.sendVoice', error);
+      _emitGenericError(_ref, code: error.code);
+      throw Exception(
+        'RealChatRepository.sendVoice failed: ${error.type}',
+      );
+    }
+    final ChatMessage message = result.data!;
+    debugPrint(
+      '[FirestoreChatRepository] sendVoice success docId=${message.id} '
+      'fromUid=${message.fromUid ?? 'null'}',
+    );
+    return message;
+  }
+}
+
+class RealPttMediaRepository implements PttMediaRepository {
+  RealPttMediaRepository(this._api, this._ref);
+
+  final PttMediaApi _api;
+  final Ref _ref;
+
+  @override
+  Future<String> uploadVoice(
+    String localPath, {
+    String? chatId,
+    String? friendId,
+  }) async {
+    final result = await _api.uploadVoiceFile(localPath);
+    final error = result.error;
+    if (error != null) {
+      debugPrint(
+        '[RealPttMediaRepository.uploadVoice] error '
+        'type=${error.type.name} '
+        'statusCode=${error.statusCode?.toString() ?? 'null'} '
+        'code=${error.code ?? 'null'} '
+        'message=${error.message ?? 'null'} '
+        'chatId=${chatId ?? '(none)'} '
+        'friendId=${friendId ?? '(none)'} '
+        'localPathHash=${localPath.hashCode}',
+      );
+      _logApiError('RealPttMediaRepository.uploadVoice', error);
+      _emitGenericError(_ref, code: error.code);
+      throw Exception(
+        'RealPttMediaRepository.uploadVoice failed: ${error.type}',
+      );
+    }
+    return result.data!;
+  }
+
+  @override
+  Future<String> resolvePlaybackUrl(String remoteKey) async {
+    final result = await _api.getSignedUrl(remoteKey);
+    final error = result.error;
+    if (error != null) {
+      _logApiError('RealPttMediaRepository.resolvePlaybackUrl', error);
+      _emitGenericError(_ref, code: error.code);
+      throw Exception(
+        'RealPttMediaRepository.resolvePlaybackUrl failed: ${error.type}',
+      );
+    }
+    return result.data!;
+  }
+}
+
+/// NOTE: RealAuthRepository는 아직 실제 서버/토큰 연동이 구현되지 않았다.
+/// Android/Windows 환경에서 FakeAuthRepository만 사용하며,
+/// iOS/macOS + 실제 백엔드 환경에서 구현/검증이 필요하다.
+class RealAuthRepository implements AuthRepository {
+  RealAuthRepository(this._api, this._ref);
+
+  final AuthApi _api;
+  final Ref _ref;
+
+  static AppUser? _cachedUser;
+
+  @override
+  Future<AuthState> loadInitialAuthState() async {
+    final prefs = _ref.read(pttPrefsProvider);
+    final bool onboardingCompleted =
+        prefs.loadOnboardingCompleted();
+    final existing = _cachedUser;
+    if (existing != null) {
+      PttLogger.log(
+        '[Auth]',
+        'RealAuthRepository.loadInitialAuthState existing user',
+        meta: <String, Object?>{
+          'userId': existing.id,
+        },
+      );
+      return AuthState(
+        status: AuthStatus.signedIn,
+        user: existing,
+        isLoading: false,
+      );
+    }
+
+    if (onboardingCompleted) {
+      final userId =
+          prefs.loadUserId() ?? 'user_local';
+      final displayName =
+          prefs.loadDisplayName() ?? 'User';
+      final avatarEmoji =
+          prefs.loadAvatarEmoji() ?? '😄';
+
+      final user = AppUser(
+        id: userId,
+        displayName: displayName,
+        avatarEmoji: avatarEmoji,
+        createdAt: DateTime.now(),
+      );
+      _cachedUser = user;
+
+      PttLogger.log(
+        '[Auth]',
+        'RealAuthRepository.loadInitialAuthState from prefs (onboardingCompleted=true)',
+        meta: <String, Object?>{
+          'userId': userId,
+        },
+      );
+
+      return AuthState(
+        status: AuthStatus.signedIn,
+        user: user,
+        isLoading: false,
+      );
+    }
+
+    PttLogger.log(
+      '[Auth]',
+      'RealAuthRepository.loadInitialAuthState no user, onboarding',
+      meta: <String, Object?>{
+        'apiType': _api.runtimeType.toString(),
+      },
+    );
+
+    return const AuthState(
+      status: AuthStatus.onboarding,
+      user: null,
+      isLoading: false,
+    );
+  }
+
+  @override
+  Future<AuthState> completeOnboarding(
+    String displayName,
+    String avatarEmoji,
+  ) async {
+    PttLogger.log(
+      '[Auth]',
+      'RealAuthRepository.completeOnboarding start',
+      meta: <String, Object?>{
+        'displayNameLen': displayName.length,
+        'apiType': _api.runtimeType.toString(),
+      },
+    );
+
+    final String deviceId =
+        DateTime.now().millisecondsSinceEpoch.toString();
+    try {
+      final result = await _api.loginWithToken(deviceId);
+      final error = result.error;
+      if (error != null) {
+        _logApiError(
+          'RealAuthRepository.completeOnboarding.login',
+          error,
+        );
+        _emitGenericError(_ref, code: error.code);
+      }
+    } catch (e) {
+      _logApiError(
+        'RealAuthRepository.completeOnboarding.login.exception',
+        const ApiError(type: ApiErrorType.unknown),
+      );
+      _emitGenericError(_ref, code: 'auth_login_exception');
+      PttLogger.log(
+        '[Auth]',
+        'RealAuthRepository.completeOnboarding login exception',
+        meta: <String, Object?>{
+          'error': e.toString(),
+        },
+      );
+    }
+
+    final now = DateTime.now();
+    final user = AppUser(
+      id: 'user_$deviceId',
+      displayName: displayName,
+      avatarEmoji: avatarEmoji,
+      createdAt: now,
+    );
+    _cachedUser = user;
+
+    PttLogger.log(
+      '[Auth]',
+      'RealAuthRepository.completeOnboarding success',
+      meta: <String, Object?>{
+        'userId': user.id,
+      },
+    );
+
+    return AuthState(
+      status: AuthStatus.signedIn,
+      user: user,
+      isLoading: false,
+    );
+  }
+
+  @override
+  Future<void> signOut() async {
+    PttLogger.log(
+      '[Auth]',
+      'RealAuthRepository.signOut',
+    );
+    _cachedUser = null;
+  }
+}

@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:voyage/ptt_debug_log.dart';
+import 'package:voyage/features/ptt/application/ptt_debug_log.dart';
 
 /// Riverpod Provider 변경 사항을 PttLogger를 통해
 /// 디버그 로그 버퍼에 기록하는 Observer.
@@ -63,4 +63,3 @@ class AppProviderObserver extends ProviderObserver {
     );
   }
 }
-

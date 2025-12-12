@@ -1,0 +1,351 @@
+// NOTE: 설계도 v1.1 기준 로컬 오디오 엔진 역할을 하며, 녹음/재생을 PTT/Manner 공통으로 제공한다.
+
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:just_audio/just_audio.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:record/record.dart';
+import 'package:voyage/features/ptt/application/ptt_ui_event.dart';
+
+/// Simple local PTT session state used to avoid overlapping
+/// record/playback on a single audio engine.
+enum PttSessionState {
+  idle,
+  recording,
+  playing,
+}
+
+class PttLocalAudioEngine {
+  PttLocalAudioEngine()
+      : _recorder = AudioRecorder(),
+        _player = AudioPlayer();
+
+  final AudioRecorder _recorder;
+  final AudioPlayer _player;
+
+  static const String _beepAssetPath =
+      'assets/sounds/ptt_beep.wav';
+
+  bool _initialized = false;
+  bool _hasEmittedMicPermissionMissing = false;
+
+  /// Lightweight session state for local PTT audio engine.
+  ///
+  /// - idle     : 녹음/재생 모두 없음
+  /// - recording: 마이크 녹음 중
+  /// - playing  : 로컬/원격 음성 재생 중
+  PttSessionState _sessionState = PttSessionState.idle;
+
+  PttSessionState get sessionState => _sessionState;
+
+  /// Absolute path for the current recording file, if any.
+  String? _currentFilePath;
+
+  /// Duration of the last successfully prepared playback, if any.
+  Duration? _lastPlaybackDuration;
+
+  int? get lastPlaybackDurationMillis =>
+      _lastPlaybackDuration?.inMilliseconds;
+
+  /// Playback position stream from the shared audio player.
+  ///
+  /// Used by chat UI to render a lightweight progress indicator.
+  Stream<Duration> get playbackPositionStream =>
+      _player.positionStream;
+
+  /// Playback duration stream from the shared audio player.
+  Stream<Duration?> get playbackDurationStream =>
+      _player.durationStream;
+
+  bool get _isSupportedPlatform =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+
+  Future<void> init() async {
+    if (!_isSupportedPlatform) {
+      debugPrint(
+        '[PTT][LocalAudio] init skipped: unsupported platform',
+      );
+      return;
+    }
+    if (_initialized) return;
+
+    try {
+      final hasPermission = await _recorder.hasPermission();
+      if (!hasPermission) {
+        debugPrint(
+          '[PTT][LocalAudio] no microphone permission on init',
+        );
+        if (!_hasEmittedMicPermissionMissing) {
+          _hasEmittedMicPermissionMissing = true;
+          PttUiEventBus.emit(PttUiEvents.micPermissionMissing());
+        }
+      }
+    } catch (e) {
+      debugPrint('[PTT][LocalAudio] init error: $e');
+    }
+
+    _initialized = true;
+  }
+
+  Future<void> startRecording() async {
+    if (!_isSupportedPlatform) {
+      debugPrint(
+        '[PTT][LocalAudio] startRecording skipped: unsupported platform',
+      );
+      return;
+    }
+
+    try {
+      if (!_initialized) {
+        await init();
+      }
+
+      final hasPermission = await _recorder.hasPermission();
+      if (!hasPermission) {
+        debugPrint(
+          '[PTT][Permission] microphone not granted on startRecording',
+        );
+        if (!_hasEmittedMicPermissionMissing) {
+          _hasEmittedMicPermissionMissing = true;
+          PttUiEventBus.emit(PttUiEvents.micPermissionMissing());
+        }
+        _currentFilePath = null;
+        return;
+      }
+
+      final isRecording = await _recorder.isRecording();
+      if (isRecording) {
+        await _recorder.stop();
+      }
+
+      const config = RecordConfig(
+        encoder: AudioEncoder.aacLc,
+        numChannels: 1,
+        sampleRate: 16000,
+      );
+
+	      // Use an app-internal writable directory for recordings.
+	      final baseDir = await getTemporaryDirectory();
+	      final recordingsDir = Directory('${baseDir.path}/ptt');
+	      try {
+	        if (!recordingsDir.existsSync()) {
+	          await recordingsDir.create(recursive: true);
+	        }
+	      } catch (e) {
+	        debugPrint(
+	          '[PTT][LocalAudio] failed to create recordingsDir: $e',
+	        );
+	        _currentFilePath = null;
+	        return;
+	      }
+
+      final fileName =
+          'ptt_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      final fullPath = '${recordingsDir.path}/$fileName';
+
+      _currentFilePath = fullPath;
+
+      // Log file name only, avoiding full path in logs.
+      debugPrint(
+        '[PTT][LocalAudio] startRecording file=$fileName',
+      );
+
+      await _recorder.start(config, path: fullPath);
+      _sessionState = PttSessionState.recording;
+    } catch (e) {
+      debugPrint('[PTT][LocalAudio] startRecording error: $e');
+      _currentFilePath = null;
+      _sessionState = PttSessionState.idle;
+    }
+  }
+
+  Future<String?> stopRecordingAndGetPath() async {
+    if (!_isSupportedPlatform) {
+      debugPrint(
+        '[PTT][LocalAudio] stopRecording skipped: unsupported platform',
+      );
+      return null;
+    }
+
+    if (_currentFilePath == null) {
+      // Nothing to stop / no known file path.
+      try {
+        await _recorder.stop();
+      } catch (_) {
+        // ignore
+      }
+      debugPrint(
+        '[PTT][LocalAudio] stopRecording: no current file path',
+      );
+      return null;
+    }
+
+    try {
+      // Stop the recorder; we ignore the returned path and use our own.
+      await _recorder.stop();
+
+      final path = _currentFilePath;
+      _currentFilePath = null;
+
+	      if (path == null || path.isEmpty) {
+	        debugPrint(
+	          '[PTT][LocalAudio] stopRecording: no path '
+	          '(maybe permission denied or encoder error)',
+	        );
+	        _sessionState = PttSessionState.idle;
+	        return null;
+	      }
+      debugPrint(
+        '[PTT][LocalAudio] stopRecordingAndGetPath hasPath=true',
+      );
+      _sessionState = PttSessionState.idle;
+      return path;
+    } catch (e) {
+      debugPrint('[PTT][LocalAudio] stopRecording error: $e');
+      _currentFilePath = null;
+      _sessionState = PttSessionState.idle;
+      return null;
+    }
+  }
+
+  Future<void> playFromPath(
+    String path, {
+    bool rethrowOnError = false,
+  }) async {
+    if (!_isSupportedPlatform) {
+      debugPrint(
+        '[PTT][LocalAudio] playFromPath skipped: unsupported platform',
+      );
+      return;
+    }
+
+    _lastPlaybackDuration = null;
+
+    if (_sessionState == PttSessionState.recording) {
+      debugPrint(
+        '[PTT][LocalAudio] playFromPath ignored: currently recording',
+      );
+      return;
+    }
+
+    try {
+      await _player.stop();
+      final bool isRemote =
+          path.startsWith('http://') ||
+              path.startsWith('https://');
+      if (isRemote) {
+        debugPrint(
+          '[AudioPlayer] play url (hash=${path.hashCode})',
+        );
+        await _player.setUrl(path);
+      } else {
+        debugPrint(
+          '[AudioPlayer] play file (hash=${path.hashCode})',
+        );
+        await _player.setFilePath(path);
+      }
+      _lastPlaybackDuration = _player.duration;
+      _sessionState = PttSessionState.playing;
+      await _player.play();
+      _sessionState = PttSessionState.idle;
+    } catch (e) {
+      debugPrint('[AudioPlayer] play error: $e');
+      debugPrint('[PTT][LocalAudio] playFromPath error: $e');
+      _sessionState = PttSessionState.idle;
+      if (rethrowOnError) {
+        rethrow;
+      }
+    }
+  }
+
+  Future<void> playBeep({double volume = 1.0}) async {
+    if (!_isSupportedPlatform) {
+      debugPrint(
+        '[PTT][LocalAudio] playBeep skipped: unsupported platform',
+      );
+      return;
+    }
+
+    if (_sessionState == PttSessionState.recording) {
+      debugPrint(
+        '[PTT][LocalAudio] playBeep ignored: currently recording',
+      );
+      return;
+    }
+
+    final previousVolume = _player.volume;
+    try {
+      await _player.stop();
+      await _player.setAsset(_beepAssetPath);
+      await _player.setVolume(volume);
+      _sessionState = PttSessionState.playing;
+      await _player.play();
+    } catch (e) {
+      debugPrint('[PTT][LocalAudio] playBeep error: $e');
+    } finally {
+      try {
+        await _player.setVolume(previousVolume);
+      } catch (_) {
+        // ignore
+      }
+      _sessionState = PttSessionState.idle;
+    }
+  }
+
+  Future<void> stopPlayback() async {
+    if (!_isSupportedPlatform) {
+      debugPrint(
+        '[PTT][LocalAudio] stopPlayback skipped: unsupported platform',
+      );
+      return;
+    }
+
+    try {
+      await _player.stop();
+    } catch (e) {
+      debugPrint('[PTT][LocalAudio] stopPlayback error: $e');
+    }
+    _sessionState = PttSessionState.idle;
+  }
+
+  Future<void> dispose() async {
+    try {
+      await _player.dispose();
+    } catch (e) {
+      debugPrint('[PTT][LocalAudio] dispose error: $e');
+    }
+  }
+
+  /// 파일 경로 기준으로 대략적인 재생 길이(ms)를 추정한다.
+  ///
+  /// 실제 재생은 하지 않고, 디코더가 보고한 duration만 사용한다.
+  Future<int?> probeDurationMillis(String path) async {
+    if (!_isSupportedPlatform) {
+      debugPrint(
+        '[PTT][LocalAudio] probeDurationMillis skipped: unsupported platform',
+      );
+      return null;
+    }
+
+    try {
+      await _player.stop();
+      await _player.setFilePath(path);
+      _lastPlaybackDuration = _player.duration;
+      final duration = _lastPlaybackDuration;
+      final millis = duration?.inMilliseconds;
+      debugPrint(
+        '[PTT][LocalAudio] probeDurationMillis '
+        'hasDuration=${millis != null} millis=${millis ?? 0}',
+      );
+      return millis;
+    } catch (e) {
+      debugPrint(
+        '[PTT][LocalAudio] probeDurationMillis error: $e',
+      );
+      return null;
+    }
+  }
+}
