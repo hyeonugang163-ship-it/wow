@@ -1,4 +1,5 @@
-import com.android.build.gradle.BaseExtension
+import com.android.build.api.dsl.ApplicationExtension
+import com.android.build.api.dsl.LibraryExtension
 import org.gradle.api.tasks.compile.JavaCompile
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
@@ -28,7 +29,7 @@ subprojects {
     // Configure JavaCompile tasks directly at configuration time
     // instead of using afterEvaluate, to avoid Gradle 8+ restrictions.
     plugins.withId("com.android.application") {
-        extensions.configure<BaseExtension>("android") {
+        extensions.configure<ApplicationExtension>("android") {
             compileOptions {
                 sourceCompatibility = JavaVersion.VERSION_17
                 targetCompatibility = JavaVersion.VERSION_17
@@ -36,7 +37,7 @@ subprojects {
         }
     }
     plugins.withId("com.android.library") {
-        extensions.configure<BaseExtension>("android") {
+        extensions.configure<LibraryExtension>("android") {
             compileOptions {
                 sourceCompatibility = JavaVersion.VERSION_17
                 targetCompatibility = JavaVersion.VERSION_17
