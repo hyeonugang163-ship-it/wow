@@ -72,21 +72,6 @@ class PttLocalAudioEngine {
     }
     if (_initialized) return;
 
-    try {
-      final hasPermission = await _recorder.hasPermission();
-      if (!hasPermission) {
-        debugPrint(
-          '[PTT][LocalAudio] no microphone permission on init',
-        );
-        if (!_hasEmittedMicPermissionMissing) {
-          _hasEmittedMicPermissionMissing = true;
-          PttUiEventBus.emit(PttUiEvents.micPermissionMissing());
-        }
-      }
-    } catch (e) {
-      debugPrint('[PTT][LocalAudio] init error: $e');
-    }
-
     _initialized = true;
   }
 
@@ -125,6 +110,7 @@ class PttLocalAudioEngine {
         encoder: AudioEncoder.aacLc,
         numChannels: 1,
         sampleRate: 16000,
+        bitRate: 24000,
       );
 
 	      // Use an app-internal writable directory for recordings.
@@ -267,7 +253,10 @@ class PttLocalAudioEngine {
     }
   }
 
-  Future<void> playBeep({double volume = 1.0}) async {
+  Future<void> playBeep({
+    double volume = 0.7,
+    bool allowDuringRecording = false,
+  }) async {
     if (!_isSupportedPlatform) {
       debugPrint(
         '[PTT][LocalAudio] playBeep skipped: unsupported platform',
@@ -275,7 +264,8 @@ class PttLocalAudioEngine {
       return;
     }
 
-    if (_sessionState == PttSessionState.recording) {
+    if (!allowDuringRecording &&
+        _sessionState == PttSessionState.recording) {
       debugPrint(
         '[PTT][LocalAudio] playBeep ignored: currently recording',
       );

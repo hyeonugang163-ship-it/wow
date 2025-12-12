@@ -12,6 +12,7 @@ import 'package:go_router/go_router.dart';
 import 'package:voyage/features/auth/application/auth_state.dart';
 import 'package:voyage/features/auth/application/auth_state_notifier.dart';
 import 'package:voyage/features/chat/presentation/chat_page.dart';
+import 'package:voyage/features/chat/application/chat_voice_player.dart';
 import 'package:voyage/core/theme/app_colors.dart';
 import 'package:voyage/core/theme/app_tokens.dart';
 import 'package:voyage/core/feature_flags.dart';
@@ -86,8 +87,9 @@ class _PttHomePageState extends ConsumerState<PttHomePage>
         ref.read(pttVibrateInWalkieProvider);
 
     if (mode == PttMode.walkie && friendAllowed) {
+      final localAudio = ref.read(pttLocalAudioEngineProvider);
       if (beepOnStart) {
-        await SystemSound.play(SystemSoundType.alert);
+        await localAudio.playBeep(allowDuringRecording: true);
       }
       if (vibrateInWalkie) {
         await HapticFeedback.mediumImpact();
@@ -110,7 +112,8 @@ class _PttHomePageState extends ConsumerState<PttHomePage>
     if (mode == PttMode.walkie &&
         currentFriendId != null &&
         beepOnEnd) {
-      await SystemSound.play(SystemSoundType.alert);
+      final localAudio = ref.read(pttLocalAudioEngineProvider);
+      await localAudio.playBeep(allowDuringRecording: true);
     }
 
     await ref.read(pttControllerProvider.notifier).stopTalk();
