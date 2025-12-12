@@ -1,4 +1,6 @@
+import com.android.build.gradle.BaseExtension
 import org.gradle.api.tasks.compile.JavaCompile
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     id("com.google.gms.google-services") version "4.4.4" apply false
@@ -24,9 +26,30 @@ subprojects {
 subprojects {
     // Configure JavaCompile tasks directly at configuration time
     // instead of using afterEvaluate, to avoid Gradle 8+ restrictions.
+    plugins.withId("com.android.application") {
+        extensions.configure<BaseExtension>("android") {
+            compileOptions {
+                sourceCompatibility = JavaVersion.VERSION_17
+                targetCompatibility = JavaVersion.VERSION_17
+            }
+        }
+    }
+    plugins.withId("com.android.library") {
+        extensions.configure<BaseExtension>("android") {
+            compileOptions {
+                sourceCompatibility = JavaVersion.VERSION_17
+                targetCompatibility = JavaVersion.VERSION_17
+            }
+        }
+    }
+
     tasks.withType<JavaCompile>().configureEach {
         sourceCompatibility = JavaVersion.VERSION_17.toString()
         targetCompatibility = JavaVersion.VERSION_17.toString()
+    }
+
+    tasks.withType<KotlinCompile>().configureEach {
+        kotlinOptions.jvmTarget = JavaVersion.VERSION_17.toString()
     }
 }
 
