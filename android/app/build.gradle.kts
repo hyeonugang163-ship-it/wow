@@ -9,7 +9,13 @@ plugins {
     id("com.google.gms.google-services")
 }
 
-val keystorePropertiesFile = rootProject.file("key.properties")
+val keystorePropertiesFile =
+    listOf(
+            rootProject.file("key.properties"), // android/key.properties (recommended)
+            project.file("key.properties"), // android/app/key.properties (fallback)
+        )
+        .firstOrNull { it.exists() }
+        ?: rootProject.file("key.properties")
 val keystoreProperties = Properties()
 if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.inputStream().use(keystoreProperties::load)
@@ -47,20 +53,27 @@ android {
             if (keystorePropertiesFile.exists()) {
                 val storeFilePath =
                     keystoreProperties.getProperty("storeFile")
-                        ?: error("Missing `storeFile` in android/key.properties.")
-                storeFile = file(storeFilePath)
+                        ?: error("Missing `storeFile` in ${keystorePropertiesFile.path}.")
+                val storeFileFromAndroidRoot = rootProject.file(storeFilePath)
+                val storeFileFromAppModule = file(storeFilePath)
+                storeFile =
+                    when {
+                        storeFileFromAndroidRoot.exists() -> storeFileFromAndroidRoot
+                        storeFileFromAppModule.exists() -> storeFileFromAppModule
+                        else -> storeFileFromAppModule
+                    }
                 storePassword =
                     keystoreProperties.getProperty("storePassword")
-                        ?: error("Missing `storePassword` in android/key.properties.")
+                        ?: error("Missing `storePassword` in ${keystorePropertiesFile.path}.")
                 keyAlias =
                     keystoreProperties.getProperty("keyAlias")
-                        ?: error("Missing `keyAlias` in android/key.properties.")
+                        ?: error("Missing `keyAlias` in ${keystorePropertiesFile.path}.")
                 keyPassword =
                     keystoreProperties.getProperty("keyPassword")
-                        ?: error("Missing `keyPassword` in android/key.properties.")
+                        ?: error("Missing `keyPassword` in ${keystorePropertiesFile.path}.")
             } else if (isReleaseBuild) {
                 error(
-                    "Missing android/key.properties (upload keystore config). " +
+                    "Missing signing config file (android/key.properties or android/app/key.properties). " +
                         "Create it to build a properly-signed release bundle for Play Console.",
                 )
             }
