@@ -23,7 +23,7 @@ if (keystorePropertiesFile.exists()) {
 val isReleaseBuild = gradle.startParameter.taskNames.any { it.contains("release", ignoreCase = true) }
 
 android {
-    namespace = "com.example.voyage"
+    namespace = "com.hyeonugang.voyage"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -37,9 +37,9 @@ android {
 
     defaultConfig {
         // Application ID for Android package name.
-        // NOTE: 초기 MVP 단계에서는 기본값(com.example.voyage)을 유지하고,
+        // NOTE: 초기 MVP 단계에서는 기본값(com.hyeonugang.voyage)을 유지하고,
         // 스토어 배포 전에만 변경을 검토한다.
-        applicationId = "com.example.voyage"
+        applicationId = "com.hyeonugang.voyage"
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion

@@ -1,5 +1,4 @@
-package com.example.voyage
-
+package com.hyeonugang.voyage
 // NOTE: 설계도 v1.1 기준 Android Foreground PTT Service로, startForegroundService→startForeground 흐름과 isRunning 가드를 통해 FGS 크래시를 방지한다.
 
 import android.app.Notification
@@ -209,8 +208,8 @@ class PttService : Service() {
         private const val CHANNEL_ID = "mjtalk_ptt_channel"
         private const val NOTIFICATION_ID = 1001
 
-        const val ACTION_START_PTT = "com.example.voyage.action.START_PTT"
-        const val ACTION_STOP_PTT = "com.example.voyage.action.STOP_PTT"
+        const val ACTION_START_PTT = "com.hyeonugang.voyage.action.START_PTT"
+        const val ACTION_STOP_PTT = "com.hyeonugang.voyage.action.STOP_PTT"
 
         @Volatile
         private var isStartingOrRunning: Boolean = false

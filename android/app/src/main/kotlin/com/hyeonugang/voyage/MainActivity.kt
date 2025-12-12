@@ -1,5 +1,4 @@
-package com.example.voyage
-
+package com.hyeonugang.voyage
 // NOTE: 설계도 v1.1 기준 MethodChannel 진입점으로, PttService start/stop를 isRunning 가드와 try/catch로 보호한다.
 
 import android.util.Log
