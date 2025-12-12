@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     id("com.android.application")
@@ -6,6 +7,12 @@ plugins {
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
     id("com.google.gms.google-services")
+}
+
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties()
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.inputStream().use(keystoreProperties::load)
 }
 
 android {
@@ -36,11 +43,22 @@ android {
 
     signingConfigs {
         create("release") {
-            // TODO: 실제 스토어 배포용 keystore 준비 후 아래 값을 채운다.
-            // storeFile = file("/path/to/your/keystore.jks")
-            // storePassword = "your-store-password"
-            // keyAlias = "your-key-alias"
-            // keyPassword = "your-key-password"
+            val storeFilePath =
+                keystoreProperties.getProperty("storeFile")
+                    ?: error(
+                        "Missing `storeFile` in android/key.properties. " +
+                            "Create an upload keystore and configure signing for Play upload.",
+                    )
+            storeFile = file(storeFilePath)
+            storePassword =
+                keystoreProperties.getProperty("storePassword")
+                    ?: error("Missing `storePassword` in android/key.properties.")
+            keyAlias =
+                keystoreProperties.getProperty("keyAlias")
+                    ?: error("Missing `keyAlias` in android/key.properties.")
+            keyPassword =
+                keystoreProperties.getProperty("keyPassword")
+                    ?: error("Missing `keyPassword` in android/key.properties.")
         }
     }
 
@@ -50,9 +68,9 @@ android {
             // 디버깅/크래시 분석이 쉽도록 유지한다.
             isMinifyEnabled = false
             isShrinkResources = false
-            // keystore 준비 전까지는 debug 키로 서명해,
-            // `flutter build apk --release`를 바로 설치해볼 수 있게 한다.
-            signingConfig = signingConfigs.getByName("debug")
+            // IMPORTANT: release must NOT be signed with debug keys, or Play Console rejects it.
+            signingConfig = signingConfigs.getByName("release")
+            isDebuggable = false
         }
     }
 }
