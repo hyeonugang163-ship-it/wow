@@ -8,11 +8,20 @@ import 'package:voyage/abuse.dart';
 import 'package:voyage/chat_message.dart';
 import 'package:voyage/chat_state.dart';
 import 'package:voyage/core/theme/app_colors.dart';
+import 'package:voyage/core/theme/app_tokens.dart';
 import 'package:voyage/friend_state.dart';
 import 'package:voyage/ptt_ui_event.dart';
 
-class FriendsPage extends ConsumerWidget {
+class FriendsPage extends ConsumerStatefulWidget {
   const FriendsPage({super.key});
+
+  @override
+  ConsumerState<FriendsPage> createState() => _FriendsPageState();
+}
+
+class _FriendsPageState extends ConsumerState<FriendsPage> {
+  final TextEditingController _searchController =
+      TextEditingController();
 
   String _formatTime(DateTime time) {
     final now = DateTime.now();
@@ -31,7 +40,14 @@ class FriendsPage extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ref = this.ref;
     final friends = ref.watch(friendListProvider);
     final currentTargetId =
         ref.watch(currentPttFriendIdProvider);
@@ -49,19 +65,65 @@ class FriendsPage extends ConsumerWidget {
             ...friends.where((f) => f.id != currentTargetId),
           ];
 
+    final query =
+        _searchController.text.trim().toLowerCase();
+    final visibleFriends = query.isEmpty
+        ? orderedFriends
+        : orderedFriends.where((f) {
+            final name = f.name.toLowerCase();
+            final status = (f.status ?? '').toLowerCase();
+            return name.contains(query) ||
+                status.contains(query);
+          }).toList(growable: false);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('친구'),
       ),
-      body: orderedFriends.isEmpty
-          ? const Center(
-              child: Text('아직 친구가 없습니다'),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              itemCount: orderedFriends.length,
-              itemBuilder: (context, index) {
-                final friend = orderedFriends[index];
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.sm,
+              AppSpacing.lg,
+              AppSpacing.md,
+            ),
+            child: TextField(
+              controller: _searchController,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                prefixIcon: const Icon(Icons.search),
+                hintText: '친구 검색',
+                suffixIcon: query.isEmpty
+                    ? null
+                    : IconButton(
+                        icon: const Icon(Icons.close),
+                        tooltip: '검색 지우기',
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() {});
+                        },
+                      ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: visibleFriends.isEmpty
+                ? Center(
+                    child: Text(
+                      query.isEmpty
+                          ? '아직 친구가 없습니다'
+                          : '검색 결과가 없습니다',
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.only(
+                      bottom: AppSpacing.lg,
+                    ),
+                    itemCount: visibleFriends.length,
+                    itemBuilder: (context, index) {
+                      final friend = visibleFriends[index];
                 final chatId = friend.id;
                 final name = friend.name;
                 final initial =
@@ -103,32 +165,84 @@ class FriendsPage extends ConsumerWidget {
                   subtitleText = '아직 메시지 없음';
                 }
 
-                return ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 4,
+                return Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                    vertical: AppSpacing.xs,
                   ),
-                  leading: CircleAvatar(
-                    radius: 20,
-                    backgroundColor: AppColors.primarySoft,
-                    child: Text(
-                      initial,
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(
-                            color: AppColors.textPrimary,
+                  child: Card(
+                    child: InkWell(
+                      borderRadius:
+                          BorderRadius.circular(AppRadii.lg),
+                      onTap: () {
+                        ref
+                            .read(
+                              currentPttFriendIdProvider.notifier,
+                            )
+                            .state = friend.id;
+                        if (!context.mounted) {
+                          return;
+                        }
+                        context.push('/chat/${friend.id}');
+                      },
+                      onLongPress: () {
+                        ref
+                            .read(
+                              currentPttFriendIdProvider.notifier,
+                            )
+                            .state = friend.id;
+                        if (!context.mounted) {
+                          return;
+                        }
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              '"${friend.name}"님이 현재 무전 대상입니다.',
+                            ),
+                            duration:
+                                const Duration(seconds: 2),
                           ),
-                    ),
-                  ),
-                  title: Row(
+                        );
+                      },
+                      child: ListTile(
+                        contentPadding:
+                            const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.md,
+                          vertical: AppSpacing.xs,
+                        ),
+                        leading: Container(
+                          width: 44,
+                          height: 44,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient:
+                                AppColors.brandGradient,
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            initial,
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(
+                                  color:
+                                      AppColors.textPrimary,
+                                  fontWeight:
+                                      FontWeight.w700,
+                                ),
+                          ),
+                        ),
+                        title: Row(
                     children: [
                       Expanded(
                         child: Text(
                           friend.name,
                           style: Theme.of(context)
                               .textTheme
-                              .bodyLarge,
+                              .bodyLarge
+                              ?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -235,8 +349,10 @@ class FriendsPage extends ConsumerWidget {
                                 currentPttFriendIdProvider.notifier,
                               )
                               .state = friend.id;
-                          ScaffoldMessenger.of(context)
-                              .showSnackBar(
+                          if (!context.mounted) {
+                            return;
+                          }
+                          ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(
                                 '"${friend.name}"님이 현재 무전 대상입니다.',
@@ -411,6 +527,9 @@ class FriendsPage extends ConsumerWidget {
                                               reason: reason,
                                             );
 
+                                        if (!context.mounted) {
+                                          return;
+                                        }
                                         navigator.pop();
                                         bottomRef
                                             .read(
@@ -434,28 +553,15 @@ class FriendsPage extends ConsumerWidget {
                       ),
                     ],
                   ),
-                  onTap: () {
-                    ref
-                        .read(currentPttFriendIdProvider.notifier)
-                        .state = friend.id;
-                    context.push('/chat/${friend.id}');
-                  },
-                  onLongPress: () {
-                    ref
-                        .read(currentPttFriendIdProvider.notifier)
-                        .state = friend.id;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          '"${friend.name}"님이 현재 무전 대상입니다.',
-                        ),
-                        duration: const Duration(seconds: 2),
                       ),
-                    );
-                  },
+                    ),
+                  ),
                 );
               },
             ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -16,6 +16,13 @@ final pttVibrateInWalkieProvider = StateProvider<bool>(
   (ref) => false,
 );
 
+/// Whether to play a short beep before auto-playing an incoming Walkie PTT.
+///
+/// Helps the receiver avoid being startled by sudden voice playback.
+final pttBeepOnReceiveProvider = StateProvider<bool>(
+  (ref) => true,
+);
+
 /// Whether to show the on-screen PTT debug overlay.
 final pttDebugOverlayEnabledProvider = StateProvider<bool>(
   (ref) => false,

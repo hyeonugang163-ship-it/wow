@@ -13,6 +13,7 @@ import 'package:voyage/auth/auth_state.dart';
 import 'package:voyage/auth/auth_state_notifier.dart';
 import 'package:voyage/chat_page.dart';
 import 'package:voyage/core/theme/app_colors.dart';
+import 'package:voyage/core/theme/app_tokens.dart';
 import 'package:voyage/feature_flags.dart';
 import 'package:voyage/friend_state.dart';
 import 'package:voyage/ptt_controller.dart';
@@ -26,13 +27,20 @@ import 'package:voyage/ptt_ui_event.dart';
 /// Minimum hold duration before PTT actually starts.
 ///
 /// 사용자가 오동작 없이 "꾹 눌러서 말하기"를 인지할 수 있도록
-/// 기본값을 1초로 둔다.
+/// 기본값을 0.5초로 둔다.
 ///
 /// TODO: 플랫폼/시장별 튜닝이 필요하면 PolicyConfig / FeatureFlags 로 이동한다.
-const Duration kPttMinHoldDuration = Duration(milliseconds: 1000);
+const Duration kPttMinHoldDuration = Duration(milliseconds: 500);
 
 class PttHomePage extends ConsumerStatefulWidget {
-  const PttHomePage({super.key});
+  const PttHomePage({
+    super.key,
+    this.embeddedInTabs = false,
+  });
+
+  /// When true, this page is used as a bottom-tab destination
+  /// and should not render redundant top-level navigation actions.
+  final bool embeddedInTabs;
 
   @override
   ConsumerState<PttHomePage> createState() => _PttHomePageState();
@@ -129,6 +137,9 @@ class _PttHomePageState extends ConsumerState<PttHomePage>
     );
 
     _holdTimer = Timer(kPttMinHoldDuration, () async {
+      if (!mounted) {
+        return;
+      }
       if (!_isPressed || _hasStartedTalk) {
         return;
       }
@@ -212,6 +223,7 @@ class _PttHomePageState extends ConsumerState<PttHomePage>
   @override
   Widget build(BuildContext context) {
     final ref = this.ref;
+    final embeddedInTabs = widget.embeddedInTabs;
 
     // NOTE: ref.listen은 ConsumerState.build 안에서만 사용한다.
     // PTT UI 이벤트(PttUiEvent)를 감지해 SnackBar를 노출하고,
@@ -306,50 +318,76 @@ class _PttHomePageState extends ConsumerState<PttHomePage>
         _showDebugOverlay || debugOverlayEnabled;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('PTT'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.chat_bubble_outline),
-            tooltip: '채팅',
-            onPressed: () {
-              context.push('/chats');
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.people_alt_outlined),
-            tooltip: '친구',
-            onPressed: () {
-              context.push('/friends');
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            tooltip: '설정',
-            onPressed: () {
-              context.push('/settings');
-            },
-          ),
-          if (kDebugMode)
-            IconButton(
-              icon: const Icon(Icons.bug_report_outlined),
-              tooltip: '디버그',
-              onPressed: () {
-                setState(() {
-                  _showDebugOverlay = !_showDebugOverlay;
-                });
-              },
+      appBar: embeddedInTabs
+          ? null
+          : AppBar(
+              title: const Text('PTT'),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.chat_bubble_outline),
+                  tooltip: '채팅',
+                  onPressed: () {
+                    context.push('/chats');
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.people_alt_outlined),
+                  tooltip: '친구',
+                  onPressed: () {
+                    context.push('/friends');
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.settings_outlined),
+                  tooltip: '설정',
+                  onPressed: () {
+                    context.push('/settings');
+                  },
+                ),
+                if (kDebugMode)
+                  IconButton(
+                    icon: const Icon(Icons.bug_report_outlined),
+                    tooltip: '디버그',
+                    onPressed: () {
+                      setState(() {
+                        _showDebugOverlay = !_showDebugOverlay;
+                      });
+                    },
+                  ),
+              ],
             ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
+      body: SafeArea(
+        child: Stack(
+          children: [
+            ListView(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              children: [
+                if (embeddedInTabs) ...[
+                  const SizedBox(height: AppSpacing.xs),
+                  Row(
+                    children: [
+                      Text(
+                        '무전',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const Spacer(),
+                      if (kDebugMode)
+                        IconButton(
+                          icon: const Icon(Icons.bug_report_outlined),
+                          tooltip: '디버그',
+                          onPressed: () {
+                            setState(() {
+                              _showDebugOverlay = !_showDebugOverlay;
+                            });
+                          },
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                ],
               Card(
                 child: InkWell(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(AppRadii.lg),
                   onTap: () {
                     final friend = currentFriend;
                     if (friend == null) {
@@ -369,125 +407,150 @@ class _PttHomePageState extends ConsumerState<PttHomePage>
                       extra: args,
                     );
                   },
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 22,
-                          backgroundColor: AppColors.primarySoft,
-                          child: Text(
-                            hasTarget
-                                ? targetName.characters.first
-                                : '＋',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(
-                                  color: AppColors.textPrimary,
-                                ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      targetName,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleMedium,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
+                  child: Ink(
+                    decoration: BoxDecoration(
+                      gradient: AppColors.subtleSurfaceGradient,
+                      borderRadius: BorderRadius.circular(AppRadii.lg),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppSpacing.lg),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 48,
+                            height: 48,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: AppColors.brandGradient,
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              hasTarget
+                                  ? targetName.characters.first
+                                  : '＋',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(
+                                    color: AppColors.textPrimary,
+                                    fontWeight: FontWeight.w700,
                                   ),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding:
-                                        const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: targetChipColor
-                                          .withAlpha(31),
-                                      borderRadius:
-                                          BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: targetChipColor
-                                            .withAlpha(128),
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.lg),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        targetName,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleMedium
+                                            ?.copyWith(
+                                              fontWeight:
+                                                  FontWeight.w700,
+                                            ),
+                                        overflow:
+                                            TextOverflow.ellipsis,
                                       ),
                                     ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          targetChipIcon,
-                                          size: 14,
-                                          color: targetChipColor,
+                                    const SizedBox(width: AppSpacing.sm),
+                                    Container(
+                                      padding:
+                                          const EdgeInsets.symmetric(
+                                        horizontal: AppSpacing.sm,
+                                        vertical: AppSpacing.xs,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: targetChipColor
+                                            .withAlpha(31),
+                                        borderRadius:
+                                            BorderRadius.circular(
+                                          AppRadii.md,
                                         ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          hasTarget
-                                              ? (isFriendBlocked
-                                                  ? '차단'
-                                                  : (!friendAllowed
-                                                      ? '무전 OFF'
-                                                      : (mode ==
-                                                              PttMode.walkie
-                                                          ? '즉시재생'
-                                                          : '매너')))
-                                              : '친구 선택',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .labelSmall
-                                              ?.copyWith(
-                                                color: targetChipColor,
-                                              ),
+                                        border: Border.all(
+                                          color: targetChipColor
+                                              .withAlpha(128),
                                         ),
-                                      ],
+                                      ),
+                                      child: Row(
+                                        mainAxisSize:
+                                            MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            targetChipIcon,
+                                            size: 14,
+                                            color: targetChipColor,
+                                          ),
+                                          const SizedBox(
+                                            width: AppSpacing.xs,
+                                          ),
+                                          Text(
+                                            hasTarget
+                                                ? (isFriendBlocked
+                                                    ? '차단'
+                                                    : (!friendAllowed
+                                                        ? '무전 OFF'
+                                                        : (mode ==
+                                                                PttMode.walkie
+                                                            ? '즉시재생'
+                                                            : '매너')))
+                                                : '친구 선택',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .labelSmall
+                                                ?.copyWith(
+                                                  color:
+                                                      targetChipColor,
+                                                  fontWeight:
+                                                      FontWeight.w700,
+                                                ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                targetSubtitle,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall,
-                              ),
-                            ],
+                                  ],
+                                ),
+                                const SizedBox(height: AppSpacing.xs),
+                                Text(
+                                  targetSubtitle,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall,
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        if (hasTarget && !isFriendBlocked)
-                          Switch.adaptive(
-                            value: friendAllowed,
-                            onChanged: (value) {
-                              final id = currentFriendId;
-                              if (id == null) return;
-                              ref
-                                  .read(
-                                    friendPttAllowProvider.notifier,
-                                  )
-                                  .setAllowed(id, value);
-                            },
-                          )
-                        else
-                          const Icon(Icons.chevron_right),
-                      ],
+                          if (hasTarget && !isFriendBlocked)
+                            Switch.adaptive(
+                              value: friendAllowed,
+                              onChanged: (value) {
+                                final id = currentFriendId;
+                                if (id == null) return;
+                                ref
+                                    .read(
+                                      friendPttAllowProvider.notifier,
+                                    )
+                                    .setAllowed(id, value);
+                              },
+                            )
+                          else
+                            const Icon(Icons.chevron_right),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               Card(
                 child: Padding(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(AppSpacing.md),
                   child: Column(
                     crossAxisAlignment:
                         CrossAxisAlignment.start,
@@ -534,15 +597,11 @@ class _PttHomePageState extends ConsumerState<PttHomePage>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     AnimatedSwitcher(
-                      duration: const Duration(
-                        milliseconds: 150,
-                      ),
+                      duration: AppMotion.fast,
                       child: Text(
                         _isPressed || isTalking
                             ? '녹음 중… 손을 떼면 전송'
-                            : (hasTarget
-                                ? '꾹 누르고 말하기'
-                                : '친구를 선택해 시작'),
+                            : '꾹 눌러 말하세요',
                         key: ValueKey<String>(
                           '${_isPressed}_${isTalking}_${hasTarget}_${mode.name}',
                         ),
@@ -596,15 +655,38 @@ class _PttHomePageState extends ConsumerState<PttHomePage>
                                         ? '녹음 중…'
                                         : '꾹 누르기';
 
-                        return GestureDetector(
-                          onTapDown: (_) => _onPressDown(context),
-                          onTapUp: (_) async =>
-                              _onPressEnd(context),
-                          onTapCancel: () async =>
-                              _onPressEnd(context),
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
+                        final tooltipMessage = !hasTarget
+                            ? '먼저 친구를 선택하세요'
+                            : isFriendBlocked
+                                ? '차단된 친구입니다'
+                                : '꾹 눌러 말하기';
+
+                        return Tooltip(
+                          message: tooltipMessage,
+                          child: GestureDetector(
+                            onTapDown: (_) =>
+                                _onPressDown(context),
+                            onTapUp: (_) async =>
+                                _onPressEnd(context),
+                            onTapCancel: () async =>
+                                _onPressEnd(context),
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                              if (isHolding || isTalking)
+                                Container(
+                                  width: 244,
+                                  height: 244,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    gradient: RadialGradient(
+                                      colors: [
+                                        ringColor.withAlpha(80),
+                                        Colors.transparent,
+                                      ],
+                                    ),
+                                  ),
+                                ),
                               Container(
                                 width: 216,
                                 height: 216,
@@ -635,9 +717,8 @@ class _PttHomePageState extends ConsumerState<PttHomePage>
                                   ),
                                 ),
                               AnimatedContainer(
-                                duration:
-                                    const Duration(milliseconds: 120),
-                                curve: Curves.easeOut,
+                                duration: AppMotion.fast,
+                                curve: AppMotion.standard,
                                 width: isHolding || isTalking
                                     ? 188
                                     : 180,
@@ -680,7 +761,8 @@ class _PttHomePageState extends ConsumerState<PttHomePage>
                                   ],
                                 ),
                               ),
-                            ],
+                              ],
+                            ),
                           ),
                         );
                       },
@@ -688,7 +770,7 @@ class _PttHomePageState extends ConsumerState<PttHomePage>
                     const SizedBox(height: 12),
                     Text(
                       hasTarget
-                          ? '1초 이상 꾹 누르면 녹음이 시작됩니다.'
+                          ? '0.5초 이상 꾹 누르면 녹음이 시작됩니다.'
                           : 'Friends에서 무전 대상을 먼저 골라주세요.',
                       style: Theme.of(context)
                           .textTheme
@@ -701,9 +783,10 @@ class _PttHomePageState extends ConsumerState<PttHomePage>
                 ),
               ),
             ],
-          ),
-          if (showDebugOverlay) const PttDebugOverlay(),
-        ],
+            ),
+            if (showDebugOverlay) const PttDebugOverlay(),
+          ],
+        ),
       ),
     );
   }

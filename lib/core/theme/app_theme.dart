@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:voyage/core/theme/app_colors.dart';
+import 'package:voyage/core/theme/app_tokens.dart';
 
 class AppTheme {
   const AppTheme._();
@@ -29,8 +30,10 @@ class AppTheme {
       cardTheme: CardThemeData(
         color: AppColors.surface,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppRadii.lg),
         ),
+        elevation: AppElevation.level1,
+        margin: const EdgeInsets.all(0),
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: AppColors.surface,
@@ -38,16 +41,41 @@ class AppTheme {
         unselectedItemColor: AppColors.textSecondary,
         type: BottomNavigationBarType.fixed,
       ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: AppColors.surface,
+        indicatorColor: AppColors.primarySoft,
+        labelTextStyle: WidgetStateProperty.resolveWith(
+          (states) {
+            final isSelected = states.contains(WidgetState.selected);
+            return base.textTheme.labelSmall?.copyWith(
+                  color: isSelected
+                      ? AppColors.textPrimary
+                      : AppColors.textSecondary,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                ) ??
+                const TextStyle();
+          },
+        ),
+        iconTheme: WidgetStateProperty.resolveWith(
+          (states) {
+            final isSelected = states.contains(WidgetState.selected);
+            return IconThemeData(
+              size: 22,
+              color: isSelected ? AppColors.primary : AppColors.textSecondary,
+            );
+          },
+        ),
+      ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: AppColors.textPrimary,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(AppRadii.xl),
           ),
           padding: const EdgeInsets.symmetric(
-            horizontal: 20,
-            vertical: 12,
+            horizontal: AppSpacing.xl,
+            vertical: AppSpacing.md,
           ),
           textStyle: base.textTheme.labelLarge?.copyWith(
             fontWeight: FontWeight.w600,
@@ -59,11 +87,11 @@ class AppTheme {
           backgroundColor: AppColors.primary,
           foregroundColor: AppColors.textPrimary,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(AppRadii.xl),
           ),
           padding: const EdgeInsets.symmetric(
-            horizontal: 20,
-            vertical: 12,
+            horizontal: AppSpacing.xl,
+            vertical: AppSpacing.md,
           ),
           textStyle: base.textTheme.labelLarge?.copyWith(
             fontWeight: FontWeight.w600,
@@ -82,19 +110,19 @@ class AppTheme {
         filled: true,
         fillColor: AppColors.surfaceElevated,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppRadii.lg),
           borderSide: const BorderSide(
             color: AppColors.borderSubtle,
           ),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppRadii.lg),
           borderSide: const BorderSide(
             color: AppColors.borderSubtle,
           ),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppRadii.lg),
           borderSide: const BorderSide(
             color: AppColors.primary,
           ),
@@ -106,16 +134,121 @@ class AppTheme {
           color: AppColors.textSecondary,
         ),
       ),
+      listTileTheme: ListTileThemeData(
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.xs,
+        ),
+        iconColor: AppColors.textSecondary,
+        textColor: AppColors.textPrimary,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadii.lg),
+        ),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith(
+          (states) {
+            if (states.contains(WidgetState.selected)) {
+              return AppColors.textPrimary;
+            }
+            return AppColors.textSecondary;
+          },
+        ),
+        trackColor: WidgetStateProperty.resolveWith(
+          (states) {
+            if (states.contains(WidgetState.selected)) {
+              return AppColors.primary;
+            }
+            return AppColors.borderSubtle;
+          },
+        ),
+      ),
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: ButtonStyle(
+          backgroundColor: WidgetStateProperty.resolveWith(
+            (states) {
+              if (states.contains(WidgetState.selected)) {
+                return AppColors.primarySoft;
+              }
+              return Colors.transparent;
+            },
+          ),
+          foregroundColor: WidgetStateProperty.resolveWith(
+            (states) {
+              if (states.contains(WidgetState.selected)) {
+                return AppColors.textPrimary;
+              }
+              return AppColors.textSecondary;
+            },
+          ),
+          side: WidgetStateProperty.all(
+            const BorderSide(color: AppColors.borderSubtle),
+          ),
+          shape: WidgetStateProperty.all(
+            RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadii.lg),
+            ),
+          ),
+        ),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: AppColors.surfaceElevated,
+        elevation: AppElevation.level3,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadii.lg),
+        ),
+        contentTextStyle: base.textTheme.bodyMedium,
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: AppColors.surface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadii.xl),
+        ),
+        titleTextStyle: base.textTheme.titleMedium,
+        contentTextStyle: base.textTheme.bodyMedium,
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: AppColors.surface,
+        surfaceTintColor: Colors.transparent,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(AppRadii.xxl),
+          ),
+        ),
+      ),
+      dividerTheme: const DividerThemeData(
+        color: AppColors.borderSubtle,
+        thickness: 1,
+        space: 1,
+      ),
       textTheme: _buildTextTheme(base.textTheme),
     );
   }
 
   static ThemeData get lightTheme {
-    return darkTheme;
+    final base = ThemeData(
+      brightness: Brightness.light,
+      useMaterial3: true,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: AppColors.primary,
+        brightness: Brightness.light,
+      ),
+    );
+
+    return base.copyWith(
+      textTheme: _buildTextTheme(base.textTheme),
+    );
   }
 
   static TextTheme _buildTextTheme(TextTheme base) {
     return base.copyWith(
+      displaySmall: base.displaySmall?.copyWith(
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.2,
+        color: AppColors.textPrimary,
+      ),
       titleLarge: base.titleLarge?.copyWith(
         fontSize: 20,
         fontWeight: FontWeight.w600,
@@ -152,7 +285,7 @@ class AppTheme {
     onPrimaryContainer: AppColors.textPrimary,
     secondary: AppColors.secondary,
     onSecondary: AppColors.textPrimary,
-    secondaryContainer: AppColors.surfaceElevated,
+    secondaryContainer: AppColors.surfaceHighlight,
     onSecondaryContainer: AppColors.textPrimary,
     background: AppColors.background,
     onBackground: AppColors.textPrimary,

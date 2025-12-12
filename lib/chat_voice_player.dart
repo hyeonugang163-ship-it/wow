@@ -196,6 +196,19 @@ class ChatVoicePlayer {
         },
       );
     } catch (e) {
+      final bool isLatestRequest = _playRequestId == requestId;
+      if (!isLatestRequest) {
+        // Another playback request superseded this one.
+        // Avoid marking the old message as an error for an intentional interrupt.
+        PttLogger.log(
+          '[ChatVoicePlayer]',
+          'play interrupted by newer request',
+          meta: <String, Object?>{
+            'messageId': messageId ?? '(none)',
+          },
+        );
+        return;
+      }
       PttLogger.log(
         '[ChatVoicePlayer]',
         'play error',
@@ -266,6 +279,9 @@ class ChatVoicePlayer {
     }
 
     if (currentId == messageId) {
+      // Invalidate any in-flight play() so an intentional stop
+      // doesn't surface as a playback error.
+      _playRequestId += 1;
       try {
         await _localAudio.stopPlayback();
         PttLogger.log(

@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyage/chat_list_page.dart';
 import 'package:voyage/friends_page.dart';
+import 'package:voyage/ptt_home_page.dart';
 import 'package:voyage/settings_page.dart';
 
 /// Bottom navigation 기반 홈 탭 구조.
 ///
 /// - 탭1: 채팅 목록
-/// - 탭2: 친구 목록
-/// - 탭3: 설정
+/// - 탭2: 무전 홈
+/// - 탭3: 친구 목록
+/// - 탭4: 설정
 class HomeTabsPage extends ConsumerStatefulWidget {
   const HomeTabsPage({super.key});
 
@@ -26,28 +28,37 @@ class _HomeTabsPageState extends ConsumerState<HomeTabsPage> {
         index: _currentIndex,
         children: const [
           ChatListPage(),
+          PttHomePage(embeddedInTabs: true),
           FriendsPage(),
           SettingsPage(),
         ],
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (index) {
           setState(() {
             _currentIndex = index;
           });
         },
-        items: const [
-          BottomNavigationBarItem(
+        destinations: const [
+          NavigationDestination(
             icon: Icon(Icons.chat_bubble_outline),
+            selectedIcon: Icon(Icons.chat_bubble),
             label: '채팅',
           ),
-          BottomNavigationBarItem(
+          NavigationDestination(
+            icon: Icon(Icons.mic_none_outlined),
+            selectedIcon: Icon(Icons.mic),
+            label: '무전',
+          ),
+          NavigationDestination(
             icon: Icon(Icons.people_alt_outlined),
+            selectedIcon: Icon(Icons.people_alt),
             label: '친구',
           ),
-          BottomNavigationBarItem(
+          NavigationDestination(
             icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
             label: '설정',
           ),
         ],
@@ -55,4 +66,3 @@ class _HomeTabsPageState extends ConsumerState<HomeTabsPage> {
     );
   }
 }
-

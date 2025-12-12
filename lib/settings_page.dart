@@ -16,6 +16,7 @@ class SettingsPage extends ConsumerWidget {
     final beepOnStart = ref.watch(pttBeepOnStartProvider);
     final beepOnEnd = ref.watch(pttBeepOnEndProvider);
     final vibrateInWalkie = ref.watch(pttVibrateInWalkieProvider);
+    final beepOnReceive = ref.watch(pttBeepOnReceiveProvider);
     final debugOverlayEnabled =
         ref.watch(pttDebugOverlayEnabledProvider);
     final verboseLoggingEnabled =
@@ -233,6 +234,20 @@ class SettingsPage extends ConsumerWidget {
                       onChanged: (value) {
                         ref
                             .read(pttBeepOnStartProvider.notifier)
+                            .state = value;
+                      },
+                    ),
+                    SwitchListTile(
+                      title: const Text('Walkie 수신 시 알림음'),
+                      subtitle: const Text(
+                        '무전모드에서 상대가 보낸 음성이 자동 재생되기 전에 짧은 알림음을 재생합니다.',
+                      ),
+                      value: beepOnReceive,
+                      onChanged: (value) {
+                        ref
+                            .read(
+                              pttBeepOnReceiveProvider.notifier,
+                            )
                             .state = value;
                       },
                     ),

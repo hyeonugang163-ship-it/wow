@@ -2,13 +2,16 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:voyage/chat_message.dart';
 import 'package:voyage/chat_state.dart';
 import 'package:voyage/chat_voice_player.dart';
 import 'package:voyage/conversation_state.dart';
 import 'package:voyage/core/theme/app_colors.dart';
+import 'package:voyage/core/theme/app_tokens.dart';
 import 'package:voyage/feature_flags.dart';
 import 'package:voyage/friend_state.dart';
+import 'package:voyage/ptt/ptt_user_prefs.dart';
 import 'package:voyage/ptt/ptt_mode_provider.dart';
 import 'package:voyage/ptt_auto_play_target.dart';
 import 'package:voyage/ptt_debug_log.dart';
@@ -98,6 +101,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final mode = ref.watch(pttModeProvider);
     final allowMap = ref.watch(friendPttAllowProvider);
     final blockMap = ref.watch(friendBlockProvider);
+    final beepOnReceive =
+        ref.watch(pttBeepOnReceiveProvider);
 
     String? friendName;
     final matches =
@@ -152,23 +157,36 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       if (targetMessage.id.isNotEmpty &&
           (targetMessage.audioPath ?? '').isNotEmpty &&
           !_autoPlayedMessageIds.contains(targetMessage.id)) {
+        final String playMessageId = targetMessage.id;
         final String path = targetMessage.audioPath!;
-        _autoPlayedMessageIds.add(targetMessage.id);
+        _autoPlayedMessageIds.add(playMessageId);
         PttLogger.log(
           '[PTT-AutoPlay]',
           'push auto-play',
           meta: <String, Object?>{
             'chatId': chatId,
-            'messageId': targetMessage.id,
+            'messageId': playMessageId,
           },
         );
-        // fire-and-forget; 에러는 내부에서 로그만 남긴다.
+        // fire-and-forget; 알림음 → 150ms → 재생.
         final player = ref.read(chatVoicePlayerProvider);
         // ignore: unawaited_futures
-        player.togglePlay(
-          path: path,
-          messageId: targetMessage.id,
-        );
+        Future<void>(() async {
+          if (beepOnReceive) {
+            try {
+              await SystemSound.play(
+                SystemSoundType.alert,
+              );
+            } catch (_) {}
+            await Future<void>.delayed(
+              const Duration(milliseconds: 150),
+            );
+          }
+          await player.togglePlay(
+            path: path,
+            messageId: playMessageId,
+          );
+        });
       }
     }
 
@@ -256,6 +274,16 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
         final player = ref.read(chatVoicePlayerProvider);
         try {
+          if (beepOnReceive) {
+            try {
+              await SystemSound.play(
+                SystemSoundType.alert,
+              );
+            } catch (_) {}
+            await Future<void>.delayed(
+              const Duration(milliseconds: 150),
+            );
+          }
           await player.togglePlay(
             path: path,
             messageId: toPlay.id,
@@ -285,6 +313,39 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       chatId,
       () => TextEditingController(),
     );
+
+    void sendText() {
+      final text = controller.text.trim();
+      if (text.isEmpty) {
+        return;
+      }
+      ref.read(chatMessagesProvider.notifier).addMessage(
+            chatId: chatId,
+            text: text,
+          );
+
+      final friends = ref.read(friendListProvider);
+      String? friendName;
+      final matches =
+          friends.where((friend) => friend.id == chatId);
+      if (matches.isNotEmpty) {
+        friendName = matches.first.name;
+      }
+
+      final subtitle = text.length > 50
+          ? '${text.substring(0, 50)}...'
+          : text;
+
+      ref
+          .read(conversationListProvider.notifier)
+          .upsertFromMessage(
+            chatId: chatId,
+            title: friendName ?? chatId,
+            subtitle: subtitle,
+            updatedAt: DateTime.now(),
+          );
+      controller.clear();
+    }
 
     return Scaffold(
       backgroundColor: AppColors.chatBackground,
@@ -399,6 +460,28 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   final String? statusText =
                       _statusTextForMessage(message, chatId);
 
+                  final bubbleRadius = BorderRadius.only(
+                    topLeft: const Radius.circular(AppRadii.xl),
+                    topRight: const Radius.circular(AppRadii.xl),
+                    bottomLeft: Radius.circular(
+                      isMe ? AppRadii.xl : AppRadii.sm,
+                    ),
+                    bottomRight: Radius.circular(
+                      isMe ? AppRadii.sm : AppRadii.xl,
+                    ),
+                  );
+
+                  final Decoration bubbleDecoration =
+                      (isMe && !isError && !isSendFailed)
+                          ? BoxDecoration(
+                              gradient: AppColors.brandGradient,
+                              borderRadius: bubbleRadius,
+                            )
+                          : BoxDecoration(
+                              color: bubbleColor,
+                              borderRadius: bubbleRadius,
+                            );
+
                   return Align(
                     alignment: alignment,
                     child: GestureDetector(
@@ -445,25 +528,27 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                           );
                         }
                       },
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(
-                          vertical: 4,
-                          horizontal: 8,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth:
+                              MediaQuery.of(context).size.width *
+                                  0.78,
                         ),
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 8,
-                          horizontal: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          color: bubbleColor,
-                          borderRadius:
-                              BorderRadius.circular(20),
-                        ),
-	                        child: Column(
-	                          mainAxisSize: MainAxisSize.min,
-	                          crossAxisAlignment:
-	                              CrossAxisAlignment.end,
-	                          children: [
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(
+                            vertical: AppSpacing.xs,
+                            horizontal: AppSpacing.sm,
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: AppSpacing.sm,
+                            horizontal: AppSpacing.md,
+                          ),
+                          decoration: bubbleDecoration,
+                          child: Column(
+  		                          mainAxisSize: MainAxisSize.min,
+  		                          crossAxisAlignment:
+  		                              CrossAxisAlignment.end,
+  		                          children: [
 	                            Row(
 	                              mainAxisSize: MainAxisSize.min,
 	                              children: [
@@ -528,61 +613,84 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 	                            ],
 	                          ],
 	                        ),
-                      ),
-                    ),
-                  );
+	                      ),
+	                    ),
+	                  ),
+	                );
                 } else {
                   final textColor =
                       AppColors.textPrimary;
                   final String? statusText =
                       _statusTextForMessage(message, chatId);
 
+                  final bubbleRadius = BorderRadius.only(
+                    topLeft: const Radius.circular(AppRadii.xl),
+                    topRight: const Radius.circular(AppRadii.xl),
+                    bottomLeft: Radius.circular(
+                      isMe ? AppRadii.xl : AppRadii.sm,
+                    ),
+                    bottomRight: Radius.circular(
+                      isMe ? AppRadii.sm : AppRadii.xl,
+                    ),
+                  );
+
+                  final Decoration bubbleDecoration = isMe
+                      ? BoxDecoration(
+                          gradient: AppColors.brandGradient,
+                          borderRadius: bubbleRadius,
+                        )
+                      : BoxDecoration(
+                          color: baseColor,
+                          borderRadius: bubbleRadius,
+                        );
+
                   return Align(
                     alignment: alignment,
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(
-                        vertical: 4,
-                        horizontal: 8,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth:
+                            MediaQuery.of(context).size.width *
+                                0.78,
                       ),
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 8,
-                        horizontal: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isMe
-                            ? AppColors.chatBubbleMe
-                            : baseColor,
-                        borderRadius:
-                            BorderRadius.circular(20),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment:
-                            CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            message.text ?? '',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(
-                                  color: textColor,
-                                ),
-                          ),
-                          if (statusText != null) ...[
-                            const SizedBox(height: 2),
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(
+                          vertical: AppSpacing.xs,
+                          horizontal: AppSpacing.sm,
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: AppSpacing.sm,
+                          horizontal: AppSpacing.md,
+                        ),
+                        decoration: bubbleDecoration,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment:
+                              CrossAxisAlignment.end,
+                          children: [
                             Text(
-                              statusText,
+                              message.text ?? '',
                               style: Theme.of(context)
                                   .textTheme
-                                  .labelSmall
+                                  .bodyMedium
                                   ?.copyWith(
-                                    color: textColor
-                                        .withValues(alpha: 0.6),
+                                    color: textColor,
                                   ),
                             ),
+                            if (statusText != null) ...[
+                              const SizedBox(height: AppSpacing.xxs),
+                              Text(
+                                statusText,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelSmall
+                                    ?.copyWith(
+                                      color: textColor
+                                          .withValues(alpha: 0.6),
+                                    ),
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                     ),
                   );
@@ -592,55 +700,54 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           ),
           const Divider(height: 1),
           SafeArea(
+            top: false,
             child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 8,
-                vertical: 4,
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.md,
+                AppSpacing.xs,
+                AppSpacing.md,
+                AppSpacing.sm,
               ),
               child: Row(
                 children: [
                   Expanded(
-                    child: TextField(
-                      controller: controller,
-                      decoration: const InputDecoration(
-                        hintText: '메시지를 입력하세요',
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceElevated,
+                        borderRadius:
+                            BorderRadius.circular(AppRadii.pill),
+                        border: Border.all(
+                          color: AppColors.borderSubtle,
+                        ),
+                      ),
+                      child: TextField(
+                        controller: controller,
+                        minLines: 1,
+                        maxLines: 5,
+                        textInputAction: TextInputAction.send,
+                        onSubmitted: (_) => sendText(),
+                        decoration: const InputDecoration(
+                          border: InputBorder.none,
+                          hintText: '메시지 입력',
+                        ),
                       ),
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.send),
-                    onPressed: () {
-                      final text = controller.text.trim();
-                      if (text.isEmpty) {
-                        return;
-                      }
-                      ref.read(chatMessagesProvider.notifier).addMessage(
-                            chatId: chatId,
-                            text: text,
-                          );
-
-                      final friends = ref.read(friendListProvider);
-                      String? friendName;
-                      final matches =
-                          friends.where((friend) => friend.id == chatId);
-                      if (matches.isNotEmpty) {
-                        friendName = matches.first.name;
-                      }
-
-                      final subtitle = text.length > 50
-                          ? '${text.substring(0, 50)}...'
-                          : text;
-
-                      ref
-                          .read(conversationListProvider.notifier)
-                          .upsertFromMessage(
-                            chatId: chatId,
-                            title: friendName ?? chatId,
-                            subtitle: subtitle,
-                            updatedAt: DateTime.now(),
-                          );
-                      controller.clear();
-                    },
+                  const SizedBox(width: AppSpacing.sm),
+                  DecoratedBox(
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: AppColors.brandGradient,
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.send),
+                      tooltip: '전송',
+                      color: AppColors.textPrimary,
+                      onPressed: sendText,
+                    ),
                   ),
                 ],
               ),
